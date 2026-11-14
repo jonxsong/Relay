@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -74,9 +75,95 @@ func mountRunRoutes(router chi.Router, repository RunRepository) {
 			run.Get("/", getRunHandler(repository))
 			run.Get("/nodes", listRunNodesHandler(repository))
 			run.Get("/events", replayEventsHandler(repository))
+			run.Get("/stream", streamEventsHandler(repository))
 			run.Post("/cancel", cancelRunHandler(repository))
 		})
 	})
+}
+
+func streamEventsHandler(repository RunRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID, runID, ok := runRouteIDs(w, r)
+		if !ok {
+			return
+		}
+		lastSequence, err := parseLastEventID(r.Header.Get("Last-Event-ID"))
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
+			return
+		}
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			writeError(w, r, http.StatusInternalServerError, "streaming_unsupported", "streaming is unavailable", nil)
+			return
+		}
+		if _, err := repository.GetRun(r.Context(), ownerID, runID); err != nil {
+			writeRunRepositoryError(w, r, err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache, no-transform")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.WriteHeader(http.StatusOK)
+		flusher.Flush()
+
+		poll := time.NewTicker(750 * time.Millisecond)
+		heartbeat := time.NewTicker(15 * time.Second)
+		defer poll.Stop()
+		defer heartbeat.Stop()
+		for {
+			events, err := repository.ReplayEvents(r.Context(), ownerID, runID, lastSequence, 500)
+			if err != nil {
+				return
+			}
+			for _, event := range events {
+				payload, err := json.Marshal(eventFromDB(event))
+				if err != nil {
+					return
+				}
+				controller := http.NewResponseController(w)
+				_ = controller.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", event.Sequence, event.EventType, payload); err != nil {
+					return
+				}
+				lastSequence = event.Sequence
+			}
+			if len(events) > 0 {
+				flusher.Flush()
+				continue
+			}
+			run, err := repository.GetRun(r.Context(), ownerID, runID)
+			if err != nil || domain.RunStatus(run.Status).Terminal() {
+				return
+			}
+
+			select {
+			case <-r.Context().Done():
+				return
+			case <-heartbeat.C:
+				controller := http.NewResponseController(w)
+				_ = controller.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if _, err := fmt.Fprint(w, ": heartbeat\n\n"); err != nil {
+					return
+				}
+				flusher.Flush()
+			case <-poll.C:
+			}
+		}
+	}
+}
+
+func parseLastEventID(raw string) (int64, error) {
+	if strings.TrimSpace(raw) == "" {
+		return 0, nil
+	}
+	sequence, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil || sequence < 0 {
+		return 0, errors.New("Last-Event-ID must be a non-negative integer")
+	}
+	return sequence, nil
 }
 
 func submitRunHandler(repository RunRepository) http.HandlerFunc {

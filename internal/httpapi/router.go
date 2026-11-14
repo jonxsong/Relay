@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -32,7 +33,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	router.Use(securityHeaders)
 	router.Use(requestLogger)
 	router.Use(recoverer)
-	router.Use(middleware.Timeout(30 * time.Second))
+	router.Use(requestTimeout(30 * time.Second))
 	router.Use(maxBodyBytes(deps.MaxRequestBytes))
 
 	router.Route("/api/v1", func(api chi.Router) {
@@ -54,6 +55,20 @@ func NewRouter(deps Dependencies) http.Handler {
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed", nil)
 	})
 	return router
+}
+
+func requestTimeout(timeout time.Duration) func(http.Handler) http.Handler {
+	regularRequests := middleware.Timeout(timeout)
+	return func(next http.Handler) http.Handler {
+		timed := regularRequests(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(r.URL.Path, "/stream") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			timed.ServeHTTP(w, r)
+		})
+	}
 }
 
 func readinessHandler(checker ReadinessChecker) http.HandlerFunc {

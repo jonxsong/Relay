@@ -49,9 +49,11 @@ func run() error {
 		Handler:           httpapi.NewRouter(httpapi.Dependencies{Readiness: database, Workflows: database, Runs: database, DevelopmentUser: developmentUser.ID, MaxRequestBytes: cfg.MaxRequestBytes}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      35 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		MaxHeaderBytes:    1 << 20,
+		// Per-request middleware and streaming write deadlines bound writes.
+		// A server-wide WriteTimeout would terminate long-lived SSE streams.
+		WriteTimeout:   0,
+		IdleTimeout:    60 * time.Second,
+		MaxHeaderBytes: 1 << 20,
 	}
 
 	serverErrors := make(chan error, 1)

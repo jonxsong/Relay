@@ -15,6 +15,7 @@ import (
 
 type fakeRuns struct {
 	submit func(context.Context, store.SubmitRunParams) (store.SubmittedRun, error)
+	get    func(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowRun, error)
 }
 
 func (f fakeRuns) SubmitRun(ctx context.Context, params store.SubmitRunParams) (store.SubmittedRun, error) {
@@ -23,7 +24,11 @@ func (f fakeRuns) SubmitRun(ctx context.Context, params store.SubmitRunParams) (
 	}
 	return f.submit(ctx, params)
 }
-func (fakeRuns) GetRun(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowRun, error) {
+
+func (f fakeRuns) GetRun(ctx context.Context, ownerID, runID uuid.UUID) (db.WorkflowRun, error) {
+	if f.get != nil {
+		return f.get(ctx, ownerID, runID)
+	}
 	return db.WorkflowRun{}, store.ErrNotFound
 }
 func (fakeRuns) ListRuns(context.Context, uuid.UUID, *string, int32) ([]db.WorkflowRun, error) {
@@ -77,5 +82,19 @@ func TestSubmitRunReturnsAcceptedAndReplayHeader(t *testing.T) {
 	}
 	if response.Header().Get("Idempotency-Replayed") != "true" {
 		t.Fatal("missing Idempotency-Replayed header")
+	}
+}
+
+func TestStreamRejectsInvalidLastEventID(t *testing.T) {
+	t.Parallel()
+	router := NewRouter(Dependencies{
+		Readiness: fakeReadiness{}, Workflows: fakeWorkflows{}, Runs: fakeRuns{}, DevelopmentUser: uuid.New(), MaxRequestBytes: 4096,
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/runs/"+uuid.NewString()+"/stream", nil)
+	request.Header.Set("Last-Event-ID", "not-a-sequence")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusBadRequest, response.Body.String())
 	}
 }
