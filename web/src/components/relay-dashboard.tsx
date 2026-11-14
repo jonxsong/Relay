@@ -22,7 +22,8 @@ import { relayGet, relayPost } from "@/lib/relay-api";
 
 type ConnectionState = "loading" | "live" | "unavailable";
 type DialogKind = "workflow" | "run" | "auth" | null;
-type ConsoleView = "overview" | "workflows" | "runs" | "activity" | "usage" | "connections";
+type ConsoleView = "overview" | "workflows" | "runs" | "activity" | "usage" | "connections" | "settings";
+type ActivityFilter = "all" | "failures" | "retries";
 type ExecutionNodeData = { node: NodeRun };
 type ExecutionNode = Node<ExecutionNodeData, "execution">;
 type WorkflowNodeData = { id: string; type: string };
@@ -32,7 +33,7 @@ type WorkflowDefinitionNode = { id: string; type: "llm" | "tool" | "transform" |
 const nav = [
   ["overview", LayoutDashboard, "Overview"], ["workflows", WorkflowIcon, "Workflows"],
   ["runs", Play, "Runs"], ["activity", Activity, "Activity"], ["usage", BarChart3, "Usage"],
-  ["connections", Blocks, "Connections"],
+  ["connections", Blocks, "Connections"], ["settings", Settings, "Settings"],
 ] as const;
 
 const viewMeta: Record<ConsoleView, [string, string]> = {
@@ -42,6 +43,7 @@ const viewMeta: Record<ConsoleView, [string, string]> = {
   activity: ["Activity", "Replay the ordered event history for a selected run"],
   usage: ["Usage", "Provider tokens and configured model cost"],
   connections: ["Connections", "Runtime boundaries and dependency health"],
+  settings: ["Settings", "Session security and operator console behavior"],
 };
 
 const statusColor: Record<string, string> = {
@@ -141,6 +143,7 @@ export function RelayDashboard() {
   const [submitting, setSubmitting] = useState(false);
   const [apiKey, setAPIKey] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [activeView, setActiveView] = useState<ConsoleView>("overview");
   const selectedRun = runs.find((run) => run.id === selectedRunID) ?? null;
 
@@ -332,6 +335,18 @@ export function RelayDashboard() {
     }
   };
 
+  const lockConsole = async () => {
+    await fetch("/api/session", { method: "DELETE", cache: "no-store" }).catch(() => undefined);
+    setConnection("unavailable");
+    setWorkflows([]);
+    setRuns([]);
+    setNodes([]);
+    setEvents([]);
+    setUsage(null);
+    setMutationError(null);
+    setDialog("auth");
+  };
+
   const terminalRuns = runs.filter((run) => ["succeeded", "failed", "cancelled"].includes(run.status));
   const successRate = terminalRuns.length === 0 ? "—" : `${((terminalRuns.filter((run) => run.status === "succeeded").length / terminalRuns.length) * 100).toFixed(1)}%`;
   const retries = nodes.reduce((total, node) => total + Math.max(0, node.current_attempt_no - 1), 0);
@@ -340,6 +355,18 @@ export function RelayDashboard() {
   const visibleRuns = runs.filter((run) => {
     const query = searchQuery.trim().toLowerCase();
     return query === "" || run.id.toLowerCase().includes(query) || run.status.toLowerCase().includes(query) || run.workflow_version_id.toLowerCase().includes(query);
+  });
+  const visibleWorkflows = workflows.filter((workflow) => {
+    const query = searchQuery.trim().toLowerCase();
+    return query === "" || workflow.id.toLowerCase().includes(query) || workflow.name.toLowerCase().includes(query) || workflow.description.toLowerCase().includes(query);
+  });
+  const visibleEvents = events.filter((event) => {
+    const searchable = `${event.sequence} ${event.event_type} ${JSON.stringify(event.payload)}`.toLowerCase();
+    const matchesQuery = searchQuery.trim() === "" || searchable.includes(searchQuery.trim().toLowerCase());
+    const matchesKind = activityFilter === "all"
+      || (activityFilter === "failures" && (event.event_type.includes("failed") || searchable.includes("error")))
+      || (activityFilter === "retries" && (event.event_type.includes("retry") || event.event_type.includes("attempt")));
+    return matchesQuery && matchesKind;
   });
   const flowNodes = useMemo<ExecutionNode[]>(() => nodes.map((node) => ({
     id: node.id,
@@ -404,14 +431,14 @@ export function RelayDashboard() {
       <aside className="sidebar">
         <div className="product-lockup"><div className="product-mark"><Zap size={22} /></div><div><strong>Relay</strong><span>Agent Execution Engine</span></div></div>
         <nav aria-label="Primary navigation">{nav.map(([view, Icon, label]) => <button className={activeView === view ? "active" : ""} key={label} onClick={() => setActiveView(view)}><Icon size={17} /><span>{label}</span>{label === "Runs" && runs.length > 0 ? <b>{runs.length}</b> : null}</button>)}</nav>
-        <div className="sidebar-section"><span>RUNTIME</span><button><Database size={17} /><span>PostgreSQL</span><i className={connection === "live" ? "dot-live" : "dot-offline"} /></button><button><ShieldCheck size={17} /><span>Security</span></button><button><Settings size={17} /><span>Settings</span></button></div>
+        <div className="sidebar-section"><span>RUNTIME</span><button onClick={() => setActiveView("connections")}><Database size={17} /><span>PostgreSQL</span><i className={connection === "live" ? "dot-live" : "dot-offline"} /></button><button onClick={() => setActiveView("settings")}><ShieldCheck size={17} /><span>Security</span></button></div>
         <div className="sidebar-status"><div><i className={connection === "live" ? "dot-live" : "dot-offline"} /><strong>{connection === "live" ? "Connected" : connection === "loading" ? "Connecting" : "Offline"}</strong></div><span>{updatedAt ? `Updated ${updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Waiting for backend"}</span></div>
       </aside>
 
       <main className="workspace">
         <header className="topbar">
           <div><div className="title-row"><h1>{viewMeta[activeView][0]}</h1><span className={`runtime-pill ${connection}`}><i />{connection === "live" ? "Live" : connection === "loading" ? "Connecting" : "Unavailable"}</span></div><p>{viewMeta[activeView][1]}</p></div>
-          <div className="topbar-actions"><label className="search-box"><Search size={15} /><input aria-label="Search runs" placeholder="Search runs" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /></label><button className="icon-button" onClick={() => { setMutationError(null); setDialog("auth"); }} aria-label="Unlock console"><KeyRound size={17} /></button><button className="icon-button" onClick={() => void refresh()} aria-label="Refresh"><RefreshCw size={17} /></button><button className="primary-action" onClick={openRunDialog} disabled={connection !== "live" || workflows.length === 0}><Play size={15} fill="currentColor" />New run</button></div>
+          <div className="topbar-actions"><label className="search-box"><Search size={15} /><input aria-label={`Search ${activeView}`} placeholder={activeView === "activity" ? "Search events or payloads" : activeView === "workflows" ? "Search workflows" : "Search runs"} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /></label><button className="icon-button" onClick={() => { setMutationError(null); setDialog("auth"); }} aria-label="Unlock console"><KeyRound size={17} /></button><button className="icon-button" onClick={() => void refresh()} aria-label="Refresh"><RefreshCw size={17} /></button><button className="primary-action" onClick={openRunDialog} disabled={connection !== "live" || workflows.length === 0}><Play size={15} fill="currentColor" />New run</button></div>
         </header>
 
         {error ? <div className="system-banner"><span><Database size={16} />{error}</span><button onClick={() => void refresh()}>Retry connection</button></div> : null}
@@ -447,15 +474,17 @@ export function RelayDashboard() {
         </section>
         </div>
 
-        {activeView === "workflows" ? <section className="view-page"><div className="view-page-heading"><div><span className="section-index">WF</span><div><h2>Workflow catalog</h2><p>{workflows.length} immutable workflow{workflows.length === 1 ? "" : "s"}</p></div></div><button className="primary-action" onClick={() => { setMutationError(null); setDialog("workflow"); }} disabled={connection !== "live"}><Plus size={15} />New workflow</button></div><div className="workflow-layout"><div className="workflow-cards">{workflows.length === 0 ? <div className="view-empty"><WorkflowIcon size={24} /><h3>No workflows yet</h3><p>Create a validated DAG to begin executing agent work.</p></div> : workflows.map((workflow) => <article className={selectedWorkflowID === workflow.id ? "selected" : ""} key={workflow.id}><div className="workflow-card-mark"><WorkflowIcon size={18} /></div><div><h3>{workflow.name}</h3><p>{workflow.description || "No description"}</p><span><code>{workflow.id.slice(0, 8)}</code> · created {new Date(workflow.created_at).toLocaleDateString()}</span></div><div className="workflow-card-actions"><button onClick={() => { setSelectedWorkflow(null); setSelectedWorkflowID(workflow.id); }}><GitBranch size={14} />Inspect</button><button onClick={() => { setRunWorkflowID(workflow.id); setMutationError(null); setDialog("run"); }}><Play size={14} />Run</button></div></article>)}</div><div className="workflow-preview panel">{selectedWorkflow && workflowGraph.nodes.length > 0 ? <><header><div><span>VERSION {selectedWorkflow.version?.version}</span><h3>{selectedWorkflow.name}</h3></div><code>{workflowGraph.nodes.length} nodes</code></header><div><ReactFlow nodes={workflowGraph.nodes} edges={workflowGraph.edges} nodeTypes={nodeTypes} fitView nodesDraggable={false} nodesConnectable={false} minZoom={0.45} maxZoom={1.6}><Background color="#34354b" gap={22} size={1} /><Controls showInteractive={false} /></ReactFlow></div></> : <div className="view-empty"><GitBranch size={24} /><h3>Inspect a workflow</h3><p>Select a workflow to view the immutable DAG version that Relay will execute.</p></div>}</div></div></section> : null}
+        {activeView === "workflows" ? <section className="view-page"><div className="view-page-heading"><div><span className="section-index">WF</span><div><h2>Workflow catalog</h2><p>{workflows.length} immutable workflow{workflows.length === 1 ? "" : "s"}</p></div></div><button className="primary-action" onClick={() => { setMutationError(null); setDialog("workflow"); }} disabled={connection !== "live"}><Plus size={15} />New workflow</button></div><div className="workflow-layout"><div className="workflow-cards">{visibleWorkflows.length === 0 ? <div className="view-empty"><WorkflowIcon size={24} /><h3>{workflows.length === 0 ? "No workflows yet" : "No workflows found"}</h3><p>{workflows.length === 0 ? "Create a validated DAG to begin executing agent work." : "Try a different workflow name, description, or ID."}</p></div> : visibleWorkflows.map((workflow) => <article className={selectedWorkflowID === workflow.id ? "selected" : ""} key={workflow.id}><div className="workflow-card-mark"><WorkflowIcon size={18} /></div><div><h3>{workflow.name}</h3><p>{workflow.description || "No description"}</p><span><code>{workflow.id.slice(0, 8)}</code> · created {new Date(workflow.created_at).toLocaleDateString()}</span></div><div className="workflow-card-actions"><button onClick={() => { setSelectedWorkflow(null); setSelectedWorkflowID(workflow.id); }}><GitBranch size={14} />Inspect</button><button onClick={() => { setRunWorkflowID(workflow.id); setMutationError(null); setDialog("run"); }}><Play size={14} />Run</button></div></article>)}</div><div className="workflow-preview panel">{selectedWorkflow && workflowGraph.nodes.length > 0 ? <><header><div><span>VERSION {selectedWorkflow.version?.version}</span><h3>{selectedWorkflow.name}</h3></div><code>{workflowGraph.nodes.length} nodes</code></header><div><ReactFlow nodes={workflowGraph.nodes} edges={workflowGraph.edges} nodeTypes={nodeTypes} fitView nodesDraggable={false} nodesConnectable={false} minZoom={0.45} maxZoom={1.6}><Background color="#34354b" gap={22} size={1} /><Controls showInteractive={false} /></ReactFlow></div></> : <div className="view-empty"><GitBranch size={24} /><h3>Inspect a workflow</h3><p>Select a workflow to view the immutable DAG version that Relay will execute.</p></div>}</div></div></section> : null}
 
         {activeView === "runs" ? <section className="view-page"><div className="view-page-heading"><div><span className="section-index">RUN</span><div><h2>All runs</h2><p>Select a run to load its graph, events, and usage.</p></div></div><button className="primary-action" onClick={openRunDialog} disabled={connection !== "live" || workflows.length === 0}><Play size={15} />New run</button></div><div className="panel"><div className="run-table"><div className="run-row run-header"><span>Run</span><span>Status</span><span>Created</span><span>Duration</span></div>{visibleRuns.map((run) => <button className={`run-row ${run.id === selectedRunID ? "selected" : ""}`} key={run.id} onClick={() => { setSelectedRunID(run.id); setActiveView("overview"); }}><span><code>{run.id}</code><small>{run.workflow_version_id}</small></span><span><i className={`status-dot ${run.status}`} />{run.status}</span><span>{new Date(run.created_at).toLocaleString()}</span><span>{formatDuration(run)}</span></button>)}</div></div></section> : null}
 
-        {activeView === "activity" ? <section className="view-page"><div className="view-page-heading"><div><span className="section-index">EVT</span><div><h2>Ordered event replay</h2><p>{selectedRun ? `Run ${selectedRun.id} · ${events.length} events` : "Select a run from the Runs view"}</p></div></div></div><div className="panel activity-timeline">{events.length === 0 ? <div className="view-empty"><Activity size={24} /><h3>No events selected</h3><p>Execution events are append-only and monotonically sequenced per run.</p></div> : events.slice().reverse().map((event) => <article key={event.id}><span className="event-sequence">#{event.sequence}</span><i style={{ background: event.event_type.includes("failed") ? statusColor.failed : event.event_type.includes("succeeded") ? statusColor.succeeded : statusColor.running }} /><div><strong>{event.event_type}</strong><code>{JSON.stringify(event.payload)}</code></div><time>{new Date(event.occurred_at).toLocaleString()}</time></article>)}</div></section> : null}
+        {activeView === "activity" ? <section className="view-page"><div className="view-page-heading"><div><span className="section-index">EVT</span><div><h2>Ordered event replay</h2><p>{selectedRun ? `Run ${selectedRun.id} · ${events.length} durable events` : "Select a run from the Runs view"}</p></div></div><div className="activity-filters" aria-label="Event filters">{(["all", "failures", "retries"] as const).map((filter) => <button className={activityFilter === filter ? "active" : ""} onClick={() => setActivityFilter(filter)} key={filter}>{filter === "all" ? "All events" : filter}</button>)}</div></div><div className="panel activity-timeline">{visibleEvents.length === 0 ? <div className="view-empty"><Activity size={24} /><h3>{events.length === 0 ? "No events selected" : "No matching events"}</h3><p>{events.length === 0 ? "Execution events are append-only and monotonically sequenced per run." : "Change the search text or event filter to expand the timeline."}</p></div> : visibleEvents.slice().reverse().map((event) => <article key={event.id}><span className="event-sequence">#{event.sequence}</span><i style={{ background: event.event_type.includes("failed") ? statusColor.failed : event.event_type.includes("retry") ? statusColor.cancelled : event.event_type.includes("succeeded") ? statusColor.succeeded : statusColor.running }} /><div><strong>{event.event_type}</strong><code>{JSON.stringify(event.payload)}</code></div><time>{new Date(event.occurred_at).toLocaleString()}</time></article>)}</div></section> : null}
 
         {activeView === "usage" ? <section className="view-page"><div className="view-page-heading"><div><span className="section-index">$</span><div><h2>Selected run usage</h2><p>{selectedRun ? `Run ${selectedRun.id}` : "Select a run to inspect usage"}</p></div></div></div><div className="usage-summary"><Metric value={compactNumber(usage?.totals.input_tokens ?? 0)} label="Input tokens" Icon={Braces} tone="#a78bfa" /><Metric value={compactNumber(usage?.totals.output_tokens ?? 0)} label="Output tokens" Icon={Braces} tone="#22d3ee" /><Metric value={knownCost == null ? "Unknown" : `$${(knownCost / 1_000_000).toFixed(6)}`} label="Configured cost" Icon={CircleDollarSign} tone="#f0abfc" /></div><div className="panel usage-records">{usage?.items.length ? usage.items.map((item) => <article key={item.id}><div><strong>{item.provider}</strong><span>{item.model}</span></div><code>{(item.input_tokens ?? 0) + (item.output_tokens ?? 0)} tokens</code><code>{item.cost_microusd == null ? "unknown cost" : `$${(item.cost_microusd / 1_000_000).toFixed(6)}`}</code><time>{new Date(item.recorded_at).toLocaleString()}</time></article>) : <div className="view-empty"><CircleDollarSign size={24} /><h3>No usage records</h3><p>Transform and join nodes do not record model usage.</p></div>}</div></section> : null}
 
         {activeView === "connections" ? <section className="view-page"><div className="view-page-heading"><div><span className="section-index">IO</span><div><h2>Runtime boundaries</h2><p>Only health that Relay can verify is marked connected.</p></div></div></div><div className="connection-grid"><article><Database size={20} /><div><h3>Relay API + PostgreSQL</h3><p>Authoritative workflows, runs, attempts, events, and usage.</p></div><span className={connection === "live" ? "connection-ok" : "connection-bad"}>{connection}</span></article><article><Boxes size={20} /><div><h3>NATS JetStream</h3><p>Private dispatch plane. Health is enforced by the control plane, not exposed by this API.</p></div><span>server-side</span></article><article><Bot size={20} /><div><h3>Model provider</h3><p>Mock or OpenAI is selected at worker startup; pricing remains configuration.</p></div><span>worker-owned</span></article><article><Wrench size={20} /><div><h3>MCP tools</h3><p>Connections and tools fail closed unless explicitly allowlisted.</p></div><span>allowlist</span></article></div></section> : null}
+
+        {activeView === "settings" ? <section className="view-page"><div className="view-page-heading"><div><span className="section-index">CFG</span><div><h2>Operator settings</h2><p>Security-sensitive runtime settings stay server-side and are never exposed here.</p></div></div></div><div className="settings-grid"><article className="panel"><header><ShieldCheck size={18} /><div><h3>Browser session</h3><p>Encrypted, HttpOnly, SameSite=Strict session</p></div><span className={connection === "live" ? "connection-ok" : "connection-bad"}>{connection === "live" ? "unlocked" : "locked"}</span></header><dl><div><dt>Credential storage</dt><dd>Server-only encrypted cookie</dd></div><div><dt>Session lifetime</dt><dd>8 hours</dd></div><div><dt>API key in JavaScript</dt><dd>Never</dd></div></dl><button className="danger-action" onClick={() => void lockConsole()} disabled={connection !== "live"}><KeyRound size={14} />Lock this console</button></article><article className="panel"><header><RefreshCw size={18} /><div><h3>Live synchronization</h3><p>Real API data with ordered event replay</p></div><span>automatic</span></header><dl><div><dt>Catalog refresh</dt><dd>Every 10 seconds</dd></div><div><dt>Active runs</dt><dd>Server-sent events</dd></div><div><dt>Event ordering</dt><dd>Database sequence</dd></div></dl><button onClick={() => void refresh()} disabled={connection !== "live"}><RefreshCw size={14} />Refresh now</button></article><article className="panel"><header><Database size={18} /><div><h3>Durability contract</h3><p>Execution truth is owned by PostgreSQL</p></div><span>enforced</span></header><dl><div><dt>Dispatch</dt><dd>At-least-once via JetStream</dd></div><div><dt>Worker safety</dt><dd>Leases + fencing tokens</dd></div><div><dt>External effects</dt><dd>Not exactly-once</dd></div></dl></article><article className="panel"><header><Wrench size={18} /><div><h3>Provider and tools</h3><p>Configured on private worker processes</p></div><span>server-side</span></header><dl><div><dt>Model provider</dt><dd>Worker environment</dd></div><div><dt>MCP access</dt><dd>Explicit allowlist</dd></div><div><dt>Side effects</dt><dd>Permission gated</dd></div></dl></article></div></section> : null}
 
         <footer className="workspace-footer"><span>{workflows.length} workflows · {runs.length} runs</span><span><Boxes size={13} />PostgreSQL is authoritative · JetStream dispatches</span></footer>
       </main>

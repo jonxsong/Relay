@@ -45,6 +45,13 @@ test("creates, executes, inspects, and cancels a workflow", async ({ page }) => 
   await inspector.getByRole("button", { name: "Close attempt inspector" }).click();
   await page.getByRole("button", { name: "Usage" }).click();
   await expect(page.getByText("relay-mock-v1")).toBeVisible();
+  await page.getByRole("button", { name: "Activity" }).click();
+  await page.getByRole("textbox", { name: "Search activity" }).fill("node.succeeded");
+  await expect(page.locator(".activity-timeline").getByText("node.succeeded", { exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: "Search activity" }).fill("");
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByRole("heading", { name: "Browser session" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Lock this console" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Workflows" }).click();
   await card.getByRole("button", { name: "Run" }).click();

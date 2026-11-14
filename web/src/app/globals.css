@@ -199,6 +199,9 @@ button.run-row.selected { box-shadow: inset 2px 0 var(--purple); }
 .activity-timeline strong { font-size: 10px; }
 .activity-timeline code { max-width: 620px; margin-top: 6px; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .activity-timeline time, .event-sequence { color: var(--faint); font-family: var(--mono); font-size: 8px; }
+.activity-filters { display: flex; gap: 6px; }
+.activity-filters button { height: 30px; padding: 0 11px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: var(--panel); cursor: pointer; font-size: 9px; text-transform: capitalize; }
+.activity-filters button:hover, .activity-filters button.active { border-color: rgba(139,124,246,.45); color: #d9d4ff; background: rgba(108,94,218,.12); }
 .usage-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; margin-bottom: 16px; }
 .usage-records article { min-height: 62px; display: grid; grid-template-columns: 1.2fr .8fr .8fr 1fr; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line-soft); }
 .usage-records strong, .usage-records span { display: block; }
@@ -212,6 +215,21 @@ button.run-row.selected { box-shadow: inset 2px 0 var(--purple); }
 .connection-grid article > span { padding: 4px 7px; border-radius: 999px; color: var(--muted); background: rgba(255,255,255,.04); font-size: 8px; text-transform: capitalize; }
 .connection-grid article > span.connection-ok { color: var(--green); background: rgba(74,222,128,.08); }
 .connection-grid article > span.connection-bad { color: var(--red); background: rgba(251,113,133,.08); }
+.settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.settings-grid article { min-height: 280px; padding: 18px; }
+.settings-grid article > header { display: grid; grid-template-columns: 32px 1fr auto; align-items: start; gap: 11px; color: #a99cff; }
+.settings-grid h3 { margin: 0; color: #e4e5ed; font-size: 12px; }
+.settings-grid header p { margin: 5px 0 0; color: var(--muted); font-size: 9px; }
+.settings-grid header > span { padding: 4px 7px; border-radius: 999px; color: var(--muted); background: rgba(255,255,255,.04); font-size: 8px; text-transform: uppercase; }
+.settings-grid header > span.connection-ok { color: var(--green); background: rgba(74,222,128,.08); }
+.settings-grid header > span.connection-bad { color: var(--red); background: rgba(251,113,133,.08); }
+.settings-grid dl { display: grid; gap: 0; margin: 22px 0 16px; }
+.settings-grid dl > div { min-height: 39px; display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 12px; border-bottom: 1px solid var(--line-soft); }
+.settings-grid dt { color: var(--faint); font-size: 9px; }
+.settings-grid dd { margin: 0; color: #c6c8d4; font-family: var(--mono); font-size: 9px; text-align: right; }
+.settings-grid article > button { height: 32px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; color: #c6c8d4; background: var(--panel-raised); cursor: pointer; font-size: 9px; }
+.settings-grid article > button.danger-action { color: #ff9bab; border-color: rgba(251,113,133,.25); background: rgba(251,113,133,.07); }
+.settings-grid article > button:disabled { cursor: not-allowed; opacity: .45; }
 
 .dialog-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(3,4,9,.78); backdrop-filter: blur(8px); }
 .operator-dialog { width: min(660px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; border: 1px solid #35384f; border-radius: 13px; background: #11131d; box-shadow: 0 35px 100px rgba(0,0,0,.6), inset 0 1px rgba(255,255,255,.04); }
@@ -277,6 +295,7 @@ button.run-row.selected { box-shadow: inset 2px 0 var(--purple); }
   .run-row > span:nth-child(3) { display: none; }
   .workspace-footer { flex-direction: column; }
   .usage-summary, .connection-grid { grid-template-columns: 1fr; }
+  .settings-grid { grid-template-columns: 1fr; }
   .usage-records article { grid-template-columns: 1fr 1fr; }
 }
 
