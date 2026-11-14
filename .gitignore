@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 OPENAI_API_KEY.txt
+RENDER_API_KEY.txt
 
 # Go
 bin/
