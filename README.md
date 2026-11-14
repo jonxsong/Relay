@@ -36,7 +36,7 @@ Most agent demos stop at orchestration. Relay starts where the happy path ends:
   <img src="docs/assets/relay-architecture.svg" alt="Relay architecture: console and API write durable workflow state to PostgreSQL, an outbox dispatcher publishes tasks to NATS, workers execute AI and MCP nodes, and the control plane recovers expired leases" width="100%">
 </picture>
 
-The diagram is intentionally hand-drawn: the runtime is strict, but the mental model should stay approachable. See [Architecture](docs/architecture.md) for invariants and [ADR-0001](docs/adr/0001-postgres-source-of-truth.md) for the core durability decision.
+The diagram is the canonical system map used across Relay's documentation and build dashboard. See [Architecture](docs/architecture.md) for invariants and [ADR-0001](docs/adr/0001-postgres-source-of-truth.md) for the core durability decision.
 
 ## Five-minute quickstart
 

@@ -7,6 +7,7 @@
     <meta name="theme-color" content="#09090f" />
     <title>Relay — Build Status</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="architecture.css" />
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to build status</a>
@@ -23,7 +24,7 @@
 
     <main id="main">
       <section class="hero shell" id="top">
-        <div class="eyebrow"><span>BUILD LOG</span><b>03</b><span>FOUNDATION</span></div>
+        <div class="eyebrow"><span>BUILD LOG</span><b>15</b><span>IN PROGRESS</span></div>
         <h1>Building the engine<br /><em>agents can come home to.</em></h1>
         <p class="lede">Relay is becoming a crash-safe, inspectable runtime for AI workflows. This page tracks what is real, what is verified, and what comes next.</p>
         <div class="hero-actions">
@@ -31,8 +32,8 @@
           <a class="text-link" href="https://github.com/jonxsong/Relay/blob/main/README.md" target="_blank" rel="noreferrer">Read the fancy README <span>→</span></a>
         </div>
         <div class="status-strip" aria-label="Current project facts">
-          <div><strong>3</strong><span>milestones pushed</span></div>
-          <div><strong>81.7%</strong><span>domain coverage</span></div>
+          <div><strong>15</strong><span>checkpoints pushed</span></div>
+          <div><strong>84.4%</strong><span>domain coverage</span></div>
           <div><strong>Go 1.27.4</strong><span>pinned toolchain</span></div>
           <div><strong>Postgres 17</strong><span>source of truth</span></div>
         </div>
@@ -43,25 +44,10 @@
           <div><span class="kicker">THE SHAPE OF IT</span><h2 id="architecture-title">Strict runtime.<br />Human diagram.</h2></div>
           <p>The architecture stays deliberately legible: durable decisions in Postgres, notifications in JetStream, and fenced execution in horizontally scalable workers.</p>
         </div>
-        <div class="canvas" role="img" aria-label="Hand-drawn Relay architecture with Console and API flowing into PostgreSQL, control plane, NATS JetStream, workers, OpenAI and MCP tools">
-          <span class="canvas-note note-one">database = truth</span>
-          <span class="canvas-note note-two">duplicates are normal ↘</span>
-          <div class="diagram-node console"><b>Console</b><span>React Flow · SSE</span></div>
-          <div class="diagram-node api"><b>API</b><span>auth · limits</span></div>
-          <div class="diagram-node postgres accent"><b>PostgreSQL</b><span>runs · attempts · events</span></div>
-          <div class="diagram-node control"><b>Control plane</b><span>schedule · recover</span></div>
-          <div class="diagram-node nats cyan"><b>JetStream</b><span>dispatch only</span></div>
-          <div class="diagram-node workers"><b>Workers</b><span>fenced claims</span></div>
-          <div class="diagram-node openai pink"><b>OpenAI</b><span>Responses API</span></div>
-          <div class="diagram-node mcp pink"><b>MCP tools</b><span>allowlisted</span></div>
-          <svg class="connectors" viewBox="0 0 1000 520" preserveAspectRatio="none" aria-hidden="true">
-            <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#a78bfa"/></marker></defs>
-            <path d="M180 145 C250 145 250 145 320 145"/><path d="M465 145 C535 145 535 145 605 145"/>
-            <path d="M710 220 C710 280 600 280 600 330"/><path d="M650 365 C770 365 785 185 820 185" class="dashed"/>
-            <path d="M865 225 L865 330" class="dashed"/><path d="M820 390 C760 420 715 430 660 405"/>
-            <path d="M865 425 C850 470 790 470 790 495"/><path d="M905 425 C930 460 940 470 940 495"/>
-          </svg>
-        </div>
+        <figure class="architecture-card">
+          <img src="https://raw.githubusercontent.com/jonxsong/Relay/main/docs/assets/relay-architecture.svg" alt="Relay architecture: clients enter the API, PostgreSQL owns durable state, the control plane publishes through JetStream, and fenced workers call OpenAI or allowlisted MCP tools" />
+          <figcaption>One canonical diagram, rendered directly from the repository.</figcaption>
+        </figure>
       </section>
 
       <section class="section shell" id="milestones" aria-labelledby="milestones-title">
@@ -72,23 +58,27 @@
         <div class="timeline">
           <article class="milestone done">
             <div class="rail"><span>01</span></div>
-            <div class="milestone-copy"><div class="milestone-meta"><span>SHIPPED</span><code>adada75</code></div><h3>Architecture foundation</h3><p>Project identity, reliability contract, ADRs, contribution policy, and the Excalidraw-inspired system map.</p><ul><li>SVG XML validated</li><li>Secret file Git-ignored</li><li>README published to GitHub</li></ul></div>
+            <div class="milestone-copy"><div class="milestone-meta"><span>SHIPPED</span><code>main</code></div><h3>Architecture foundation</h3><p>Project identity, reliability contract, ADRs, contribution policy, and one canonical professional system map.</p><ul><li>SVG XML validated</li><li>Secret file Git-ignored</li><li>README published to GitHub</li></ul></div>
           </article>
           <article class="milestone done">
             <div class="rail"><span>02</span></div>
-            <div class="milestone-copy"><div class="milestone-meta"><span>SHIPPED</span><code>a5e73c6</code></div><h3>Executable domain core</h3><p>Bounded DAGs, deterministic cycle and depth checks, explicit states, safe input bindings, and bounded retry jitter.</p><ul><li>Unit tests passed</li><li>81.7% statement coverage</li><li><code>go vet</code> passed</li></ul></div>
+            <div class="milestone-copy"><div class="milestone-meta"><span>SHIPPED</span><code>a5e73c6</code></div><h3>Executable domain core</h3><p>Bounded DAGs, deterministic cycle and depth checks, explicit states, safe input bindings, and bounded retry jitter.</p><ul><li>Unit tests passed</li><li>84.4% statement coverage</li><li><code>go vet</code> passed</li></ul></div>
           </article>
           <article class="milestone done">
             <div class="rail"><span>03</span></div>
-            <div class="milestone-copy"><div class="milestone-meta"><span>SHIPPED</span><code>5acdfe2</code></div><h3>Durable schema & CI</h3><p>PostgreSQL schema for workflows, runs, attempts, events, outbox, usage, credentials, and idempotency—with reversible migration CI.</p><ul><li>Compose config validated</li><li>Goose migration parser passed</li><li>Postgres 17 CI gate added</li></ul></div>
+            <div class="milestone-copy"><div class="milestone-meta"><span>SHIPPED</span><code>8c5f672</code></div><h3>Durable backend slice</h3><p>PostgreSQL schema, workflow and run APIs, scheduler, outbox, JetStream, fenced workers, recovery, cancellation, and replayable SSE.</p><ul><li>Compose config validated</li><li>Unit suite passed</li><li>Postgres 17 CI gate</li></ul></div>
           </article>
           <article class="milestone active">
             <div class="rail"><span>04</span></div>
-            <div class="milestone-copy"><div class="milestone-meta"><span>IN PROGRESS</span><code>working tree</code></div><h3>Durable store vocabulary</h3><p>Compiling ownership-scoped sqlc queries for atomic event sequences, fenced leases, outbox publication, replay, cancellation, and recovery.</p><div class="progress" aria-label="Milestone four approximately 45 percent complete"><i style="width:45%"></i></div></div>
+            <div class="milestone-copy"><div class="milestone-meta"><span>IN PROGRESS</span><code>5e196e0</code></div><h3>Provider & tool boundaries</h3><p>The OpenAI Responses adapter, redacted retry classification, timeouts, and durable token usage are shipped. Safe MCP execution is next.</p><div class="progress" aria-label="Milestone four approximately 55 percent complete"><i style="width:55%"></i></div></div>
           </article>
           <article class="milestone queued">
             <div class="rail"><span>05</span></div>
-            <div class="milestone-copy"><div class="milestone-meta"><span>NEXT</span></div><h3>Runnable vertical slice</h3><p>API, control plane, worker, deterministic model, event stream, and Compose quickstart—then the developer console.</p></div>
+            <div class="milestone-copy"><div class="milestone-meta"><span>NEXT</span></div><h3>Developer console</h3><p>Next.js workflow editor, live run DAG, attempts, logs, retries, usage, settings, and robust empty, loading, and error states.</p></div>
+          </article>
+          <article class="milestone queued">
+            <div class="rail"><span>06</span></div>
+            <div class="milestone-copy"><div class="milestone-meta"><span>QUEUED</span></div><h3>Operational hardening & deployment</h3><p>Production auth, telemetry, rate limits, threat model, backup and recovery runbooks, load validation, and deployment to relay.jonzhang.dev.</p></div>
           </article>
         </div>
       </section>

@@ -1,46 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1260 710" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
   <title id="title">Relay system architecture</title>
-  <desc id="desc">A hand-drawn architecture diagram showing clients, API, PostgreSQL, control plane, NATS JetStream, workers, OpenAI, and MCP tools.</desc>
+  <desc id="desc">Professional architecture diagram showing clients entering the Relay API, durable workflow state in PostgreSQL, scheduling through a transactional outbox and NATS JetStream, fenced worker execution, and OpenAI or MCP providers.</desc>
   <defs>
-    <filter id="paper"><feTurbulence type="fractalNoise" baseFrequency=".012" numOctaves="3" seed="21" result="n"/><feBlend in="SourceGraphic" in2="n" mode="soft-light"/></filter>
-    <filter id="wiggle"><feTurbulence baseFrequency=".018" numOctaves="2" seed="7" result="noise"/><feDisplacementMap in="SourceGraphic" in2="noise" scale="2.2"/></filter>
-    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#a5b4fc"/></marker>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#080b14"/><stop offset="1" stop-color="#0d1020"/></linearGradient>
+    <linearGradient id="relayGlow" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity=".035"/></pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity=".28"/></filter>
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#a78bfa"/></marker>
+    <marker id="arrowCyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#22d3ee"/></marker>
     <style>
-      .bg{fill:#0b0b12}.box{fill:#171721;stroke:#c4b5fd;stroke-width:2.5}.data{fill:#13201d;stroke:#5eead4}.queue{fill:#111d2a;stroke:#67e8f9}.external{fill:#21172a;stroke:#f0abfc}.label{fill:#f4f4f5;font:600 21px ui-rounded,system-ui,sans-serif}.small{fill:#a1a1aa;font:15px ui-rounded,system-ui,sans-serif}.note{fill:#d4d4d8;font:16px ui-rounded,system-ui,sans-serif}.line{fill:none;stroke:#a5b4fc;stroke-width:2.5;marker-end:url(#arrow)}.dash{stroke-dasharray:8 7}.group{fill:none;stroke:#3f3f50;stroke-width:2;stroke-dasharray:10 8}.scribble{fill:none;stroke:#8b5cf6;stroke-width:2;opacity:.55}
+      text{font-family:Inter,"Segoe UI",Arial,sans-serif}.title{font-size:34px;font-weight:760;fill:#f8fafc;letter-spacing:-.8px}.subtitle{font-size:15px;fill:#94a3b8}.eyebrow{font-size:11px;font-weight:760;fill:#a78bfa;letter-spacing:2px}.boundary{fill:#101422;stroke:#30384f;stroke-width:1.5}.boundaryLabel{font-size:11px;font-weight:700;fill:#64748b;letter-spacing:1.5px}.node{fill:#161b2c;stroke:#3a435c;stroke-width:1.5}.nodeStrong{fill:#18182d;stroke:#8b5cf6;stroke-width:1.7}.nodeData{fill:#102523;stroke:#2dd4bf;stroke-width:1.7}.nodeQueue{fill:#0e2230;stroke:#22d3ee;stroke-width:1.7}.nodeExternal{fill:#21172b;stroke:#d946ef;stroke-width:1.5}.nodeTitle{font-size:18px;font-weight:700;fill:#f1f5f9}.nodeBody{font-size:12px;fill:#94a3b8}.pill{font-size:10px;font-weight:700;letter-spacing:.5px}.flow{fill:none;stroke:#a78bfa;stroke-width:2.2;marker-end:url(#arrowPurple)}.flowAsync{fill:none;stroke:#22d3ee;stroke-width:2.2;stroke-dasharray:8 7;marker-end:url(#arrowCyan)}.flowLabel{font-size:10px;font-weight:650;fill:#94a3b8}.legend{font-size:11px;fill:#64748b}.step{font-size:10px;font-weight:800;fill:#0b1020}.icon{fill:none;stroke:#c4b5fd;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.iconData{stroke:#5eead4}.iconQueue{stroke:#67e8f9}.iconExternal{stroke:#f0abfc}
     </style>
   </defs>
-  <rect class="bg" width="1260" height="710" rx="22"/>
-  <path class="scribble" d="M28 31 Q350 20 634 31 T1231 28 M31 680 Q340 692 630 681 T1228 682" filter="url(#wiggle)"/>
-  <text x="42" y="58" class="label" font-size="25">Relay — durable agent execution</text>
-  <text x="42" y="83" class="small">solid arrows: synchronous  ·  dashed arrows: asynchronous  ·  database remains authoritative</text>
-
-  <g filter="url(#wiggle)"><rect class="box" x="45" y="142" width="190" height="112" rx="16"/><rect class="box" x="45" y="420" width="190" height="112" rx="16"/></g>
-  <text x="140" y="187" class="label" text-anchor="middle">Next.js console</text><text x="140" y="218" class="small" text-anchor="middle">React Flow · SSE</text>
-  <text x="140" y="465" class="label" text-anchor="middle">API clients</text><text x="140" y="496" class="small" text-anchor="middle">OpenAPI · idempotency</text>
-
-  <g filter="url(#wiggle)"><rect class="box" x="315" y="170" width="205" height="138" rx="16"/></g>
-  <text x="417" y="214" class="label" text-anchor="middle">API</text><text x="417" y="244" class="small" text-anchor="middle">auth · validation · SSE</text><text x="417" y="270" class="small" text-anchor="middle">bounded requests</text>
-
-  <g filter="url(#wiggle)"><rect class="data" x="612" y="135" width="245" height="185" rx="18"/></g>
-  <text x="734" y="181" class="label" text-anchor="middle">PostgreSQL 17</text><text x="734" y="213" class="small" text-anchor="middle">workflows · runs · attempts</text><text x="734" y="239" class="small" text-anchor="middle">events · usage · outbox</text><path d="M675 274 q60 25 120 0" class="scribble"/><text x="734" y="300" class="note" text-anchor="middle">source of truth</text>
-
-  <g filter="url(#wiggle)"><rect class="box" x="575" y="405" width="310" height="145" rx="18"/></g>
-  <text x="730" y="447" class="label" text-anchor="middle">Control plane</text><text x="730" y="478" class="small" text-anchor="middle">scheduler · dispatcher · recovery</text><text x="730" y="504" class="small" text-anchor="middle">leases · retries · cancellation</text>
-
-  <g filter="url(#wiggle)"><rect class="queue" x="951" y="154" width="250" height="120" rx="18"/></g>
-  <text x="1076" y="199" class="label" text-anchor="middle">NATS JetStream</text><text x="1076" y="230" class="small" text-anchor="middle">dispatch, never authority</text>
-
-  <g filter="url(#wiggle)"><rect class="box" x="967" y="383" width="220" height="128" rx="18"/></g>
-  <text x="1077" y="427" class="label" text-anchor="middle">Worker pool</text><text x="1077" y="458" class="small" text-anchor="middle">fenced attempts</text><text x="1077" y="484" class="small" text-anchor="middle">horizontal scale</text>
-
-  <g filter="url(#wiggle)"><rect class="external" x="913" y="590" width="150" height="82" rx="15"/><rect class="external" x="1080" y="590" width="150" height="82" rx="15"/></g>
-  <text x="988" y="625" class="label" text-anchor="middle">OpenAI</text><text x="988" y="650" class="small" text-anchor="middle">Responses API</text>
-  <text x="1155" y="625" class="label" text-anchor="middle">MCP</text><text x="1155" y="650" class="small" text-anchor="middle">allowlisted tools</text>
-
-  <path class="line" d="M235 195 C270 195 279 212 315 224"/><path class="line" d="M235 474 C274 474 281 290 315 272"/><path class="line" d="M520 229 C555 229 571 222 612 222"/><path class="line" d="M672 320 C665 355 663 376 682 405"/><path class="line" d="M790 405 C805 371 795 348 770 320"/>
-  <path class="line dash" d="M885 456 C925 435 932 263 951 232"/><path class="line dash" d="M1077 274 L1077 383"/><path class="line" d="M967 451 C921 447 907 482 885 488"/><path class="line" d="M1044 511 C1032 544 1008 561 994 590"/><path class="line" d="M1115 511 C1132 548 1145 560 1150 590"/>
-
-  <g filter="url(#wiggle)"><rect class="group" x="285" y="110" width="630" height="475" rx="28"/></g><text x="305" y="135" class="small">trusted control boundary</text>
-  <text x="44" y="648" class="note">↳ duplicate delivery is expected</text><text x="44" y="675" class="note">↳ stale completions are rejected</text>
+  <rect width="1440" height="900" rx="28" fill="url(#background)"/><rect width="1440" height="900" rx="28" fill="url(#grid)"/><path d="M0 0H1440V5H0Z" fill="url(#relayGlow)"/>
+  <g transform="translate(54 58)">
+    <g transform="translate(0 3)"><circle cx="12" cy="24" r="7" fill="#111827" stroke="#a78bfa" stroke-width="3"/><circle cx="35" cy="12" r="7" fill="#111827" stroke="#a78bfa" stroke-width="3"/><circle cx="58" cy="24" r="7" fill="#111827" stroke="#22d3ee" stroke-width="3"/><path d="M18 21 29 15M41 15l11 6" stroke="url(#relayGlow)" stroke-width="3"/></g>
+    <text x="82" y="25" class="title">Relay execution architecture</text><text x="82" y="52" class="subtitle">Durable orchestration for observable, recoverable AI workflows</text>
+  </g>
+  <g transform="translate(54 145)">
+    <text x="0" y="0" class="eyebrow">REQUEST LAYER</text>
+    <g transform="translate(0 24)" filter="url(#shadow)"><rect width="228" height="106" rx="16" class="node"/><g transform="translate(20 22)" class="icon"><rect width="28" height="20" rx="3"/><path d="M8 29h12M14 20v9"/></g><text x="66" y="39" class="nodeTitle">Web console</text><text x="66" y="61" class="nodeBody">Workflow editor · live runs</text><rect x="66" y="75" width="50" height="18" rx="9" fill="#28233f"/><text x="91" y="88" text-anchor="middle" class="pill" fill="#c4b5fd">NEXT.JS</text></g>
+    <g transform="translate(0 154)" filter="url(#shadow)"><rect width="228" height="106" rx="16" class="node"/><g transform="translate(20 25)" class="icon"><path d="M0 10h29M0 10l8-8M0 10l8 8M29 30H0M29 30l-8-8M29 30l-8 8"/></g><text x="66" y="39" class="nodeTitle">API clients</text><text x="66" y="61" class="nodeBody">OpenAPI · idempotency</text><rect x="66" y="75" width="43" height="18" rx="9" fill="#202b3b"/><text x="87.5" y="88" text-anchor="middle" class="pill" fill="#93c5fd">HTTP</text></g>
+  </g>
+  <g transform="translate(322 145)">
+    <rect width="720" height="590" rx="24" class="boundary"/><text x="24" y="34" class="boundaryLabel">RELAY TRUST BOUNDARY</text>
+    <g transform="translate(36 68)" filter="url(#shadow)"><rect width="250" height="130" rx="17" class="nodeStrong"/><circle cx="29" cy="30" r="15" fill="#2e2450"/><path d="M24 30h10M29 25v10" class="icon"/><text x="55" y="35" class="nodeTitle">API gateway</text><text x="22" y="68" class="nodeBody">Authentication · validation</text><text x="22" y="90" class="nodeBody">SSE replay · bounded payloads</text><rect x="22" y="104" width="66" height="18" rx="9" fill="#312654"/><text x="55" y="117" text-anchor="middle" class="pill" fill="#ddd6fe">CONTROL</text></g>
+    <g transform="translate(374 68)" filter="url(#shadow)"><rect width="310" height="164" rx="17" class="nodeData"/><g transform="translate(22 22)" class="icon iconData"><ellipse cx="15" cy="6" rx="15" ry="6"/><path d="M0 6v27c0 8 30 8 30 0V6M0 19c0 8 30 8 30 0"/></g><text x="68" y="39" class="nodeTitle">PostgreSQL 17</text><text x="22" y="79" class="nodeBody">Workflows · runs · attempts · events</text><text x="22" y="101" class="nodeBody">Usage · credentials · transactional outbox</text><rect x="22" y="125" width="116" height="22" rx="11" fill="#153b37"/><text x="80" y="140" text-anchor="middle" class="pill" fill="#99f6e4">SOURCE OF TRUTH</text></g>
+    <g transform="translate(36 320)" filter="url(#shadow)"><rect width="310" height="164" rx="17" class="nodeStrong"/><g transform="translate(22 22)" class="icon"><path d="M2 17h26M6 8l-4 9 4 9M24 8l4 9-4 9"/></g><text x="68" y="39" class="nodeTitle">Control plane</text><text x="22" y="79" class="nodeBody">Scheduler · outbox dispatcher</text><text x="22" y="101" class="nodeBody">Lease recovery · retries · cancellation</text><rect x="22" y="125" width="84" height="22" rx="11" fill="#312654"/><text x="64" y="140" text-anchor="middle" class="pill" fill="#ddd6fe">RECONCILE</text></g>
+    <g transform="translate(434 320)" filter="url(#shadow)"><rect width="250" height="130" rx="17" class="nodeQueue"/><g transform="translate(22 22)" class="icon iconQueue"><path d="M0 6h30M5 16h20M10 26h10"/><circle cx="34" cy="6" r="3"/></g><text x="68" y="35" class="nodeTitle">NATS JetStream</text><text x="22" y="72" class="nodeBody">Durable task notification</text><text x="22" y="94" class="nodeBody">At-least-once delivery</text><rect x="22" y="105" width="96" height="18" rx="9" fill="#123443"/><text x="70" y="118" text-anchor="middle" class="pill" fill="#a5f3fc">NOT AUTHORITY</text></g>
+    <g transform="translate(434 482)" filter="url(#shadow)"><rect width="250" height="82" rx="17" class="nodeStrong"/><g transform="translate(22 20)" class="icon"><rect width="30" height="28" rx="4"/><path d="M7 9h16M7 19h10"/></g><text x="68" y="35" class="nodeTitle">Worker pool</text><text x="68" y="57" class="nodeBody">Fenced claims · horizontal scale</text></g>
+    <path d="M286 130H374" class="flow"/><circle cx="330" cy="130" r="12" fill="#a78bfa"/><text x="330" y="134" text-anchor="middle" class="step">2</text><text x="330" y="111" text-anchor="middle" class="flowLabel">COMMIT</text>
+    <path d="M529 232v38c0 34-338 15-338 50" class="flow"/><text x="376" y="270" text-anchor="middle" class="flowLabel">READ DURABLE STATE</text>
+    <path d="M346 402h88" class="flowAsync"/><circle cx="390" cy="402" r="12" fill="#22d3ee"/><text x="390" y="406" text-anchor="middle" class="step">3</text><text x="390" y="383" text-anchor="middle" class="flowLabel">PUBLISH</text>
+    <path d="M559 450v32" class="flowAsync"/><circle cx="559" cy="466" r="12" fill="#22d3ee"/><text x="559" y="470" text-anchor="middle" class="step">4</text>
+    <path d="M434 523H382c-62 0-76-55-36-83" class="flow"/><text x="381" y="547" text-anchor="middle" class="flowLabel">FENCED COMPLETION</text>
+  </g>
+  <path d="M282 222h76" class="flow"/><path d="M282 352h31c27 0 18-65 45-65" class="flow"/><circle cx="320" cy="222" r="12" fill="#a78bfa"/><text x="320" y="226" text-anchor="middle" class="step">1</text><text x="320" y="203" text-anchor="middle" class="flowLabel">REQUEST</text>
+  <g transform="translate(1090 145)">
+    <text x="0" y="0" class="eyebrow">EXECUTION PROVIDERS</text>
+    <g transform="translate(0 24)" filter="url(#shadow)"><rect width="296" height="116" rx="17" class="nodeExternal"/><g transform="translate(22 24)" class="icon iconExternal"><circle cx="15" cy="15" r="13"/><path d="M15 2c7 6 7 20 0 26M2 15h26"/></g><text x="70" y="40" class="nodeTitle">OpenAI</text><text x="70" y="64" class="nodeBody">Responses API · token usage</text><rect x="70" y="80" width="72" height="18" rx="9" fill="#402046"/><text x="106" y="93" text-anchor="middle" class="pill" fill="#f5d0fe">MODEL</text></g>
+    <g transform="translate(0 164)" filter="url(#shadow)"><rect width="296" height="116" rx="17" class="nodeExternal"/><g transform="translate(22 24)" class="icon iconExternal"><path d="M4 4h12v12H4zM20 20h12v12H20zM20 4h12M4 20v12"/></g><text x="70" y="40" class="nodeTitle">MCP servers</text><text x="70" y="64" class="nodeBody">Allowlisted tools · scoped secrets</text><rect x="70" y="80" width="66" height="18" rx="9" fill="#402046"/><text x="103" y="93" text-anchor="middle" class="pill" fill="#f5d0fe">TOOLS</text></g>
+  </g>
+  <path d="M1006 668h36c28 0 30-441 48-441" class="flow"/><path d="M1006 690h48c25 0 18-322 36-322" class="flow"/><circle cx="1054" cy="668" r="12" fill="#a78bfa"/><text x="1054" y="672" text-anchor="middle" class="step">5</text><text x="1054" y="650" text-anchor="middle" class="flowLabel">EXECUTE</text>
+  <g transform="translate(54 816)"><line x1="0" y1="0" x2="34" y2="0" class="flow" marker-end="none"/><text x="46" y="4" class="legend">synchronous / transactional</text><line x1="254" y1="0" x2="288" y2="0" class="flowAsync" marker-end="none"/><text x="300" y="4" class="legend">asynchronous notification</text><circle cx="568" cy="0" r="5" fill="#2dd4bf"/><text x="582" y="4" class="legend">durable authority</text><text x="1332" y="4" text-anchor="end" class="legend">Duplicates are expected · stale completions are rejected</text></g>
 </svg>
-

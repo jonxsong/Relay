@@ -1,0 +1,22 @@
+.architecture-card {
+  margin: 0;
+  overflow: hidden;
+  background: #0b0e18;
+  border: 1px solid #302d3c;
+  border-radius: var(--radius);
+  box-shadow: 0 40px 100px rgb(0 0 0 / 24%);
+}
+
+.architecture-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.architecture-card figcaption {
+  padding: 14px 20px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+  border-top: 1px solid var(--line);
+}
