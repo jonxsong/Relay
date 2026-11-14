@@ -6,6 +6,14 @@ export class RelayAPIError extends Error {
   }
 }
 
+async function relayError(response: Response) {
+  const problem = await response.json().catch(() => null) as { error?: { code?: string; message?: string } } | null;
+  if (response.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("relay:unauthorized"));
+  }
+  return new RelayAPIError(problem?.error?.message ?? `Relay API returned ${response.status}`, response.status, problem?.error?.code);
+}
+
 export async function relayGet<T>(path: string, schema: ZodType<T>, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/relay${path}`, {
     cache: "no-store",
@@ -13,8 +21,7 @@ export async function relayGet<T>(path: string, schema: ZodType<T>, signal?: Abo
     signal,
   });
   if (!response.ok) {
-    const problem = await response.json().catch(() => null) as { error?: { code?: string; message?: string } } | null;
-    throw new RelayAPIError(problem?.error?.message ?? `Relay API returned ${response.status}`, response.status, problem?.error?.code);
+    throw await relayError(response);
   }
   return schema.parse(await response.json());
 }
@@ -32,8 +39,7 @@ export async function relayPost<T>(
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    const problem = await response.json().catch(() => null) as { error?: { code?: string; message?: string; details?: unknown } } | null;
-    throw new RelayAPIError(problem?.error?.message ?? `Relay API returned ${response.status}`, response.status, problem?.error?.code);
+    throw await relayError(response);
   }
   return schema.parse(await response.json());
 }

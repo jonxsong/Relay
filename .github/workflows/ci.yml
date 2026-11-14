@@ -132,6 +132,8 @@ jobs:
       RELAY_MOCK_DELAY: 2s
       RELAY_INTEGRATION_BASE_URL: http://127.0.0.1:8080/api/v1
       RELAY_API_URL: http://127.0.0.1:8080/api/v1
+      RELAY_SESSION_SECRET: relay-ci-session-secret-at-least-32-characters
+      RELAY_E2E_API_KEY: relay-ci-browser-key
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6

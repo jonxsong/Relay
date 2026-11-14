@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
 
+import { openAPIKey, relaySessionCookie } from "@/lib/session";
+
 const safeSegment = /^[a-zA-Z0-9_-]+$/;
 const requestHeaders = ["accept", "authorization", "content-type", "idempotency-key", "last-event-id"];
 const responseHeaders = ["content-type", "cache-control", "location", "idempotency-replayed", "x-request-id"];
@@ -17,6 +19,13 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   for (const name of requestHeaders) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
+  }
+  if (!headers.has("authorization")) {
+    const sealedSession = request.cookies.get(relaySessionCookie)?.value;
+    if (sealedSession) {
+      const apiKey = await openAPIKey(sealedSession);
+      if (apiKey) headers.set("authorization", `Bearer ${apiKey}`);
+    }
   }
   try {
     const upstream = await fetch(upstreamURL, {

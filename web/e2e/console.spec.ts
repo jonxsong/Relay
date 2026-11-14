@@ -4,6 +4,16 @@ test("creates, executes, inspects, and cancels a workflow", async ({ page }) => 
   const workflowName = `browser-${Date.now()}`;
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Execution overview" })).toBeVisible();
+  const apiKey = process.env.RELAY_E2E_API_KEY;
+  if (apiKey) {
+    const unlockDialog = page.getByRole("dialog", { name: "Unlock Relay" });
+    if (!await unlockDialog.isVisible()) {
+      await page.getByRole("button", { name: "Unlock console" }).click();
+    }
+    await unlockDialog.getByRole("textbox", { name: "Relay API key" }).fill(apiKey);
+    await unlockDialog.getByRole("button", { name: "Unlock console" }).click();
+    await expect(unlockDialog).toBeHidden();
+  }
   await page.getByRole("button", { name: "Refresh" }).click();
   await expect(page.getByText("Live", { exact: true })).toBeVisible({ timeout: 15_000 });
 

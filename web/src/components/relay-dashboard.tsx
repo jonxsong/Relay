@@ -3,7 +3,7 @@
 import {
   Activity, BarChart3, Blocks, Bot, Boxes, Braces, ChevronDown,
   CircleDollarSign, Clock3, Database, GitBranch, LayoutDashboard,
-  Ban, ListFilter, Play, Plus, RefreshCw, RotateCcw, Search, Settings,
+  Ban, KeyRound, ListFilter, Play, Plus, RefreshCw, RotateCcw, Search, Settings,
   ShieldCheck, Workflow as WorkflowIcon, Wrench, X, Zap,
 } from "lucide-react";
 import {
@@ -20,7 +20,7 @@ import {
 import { relayGet, relayPost } from "@/lib/relay-api";
 
 type ConnectionState = "loading" | "live" | "unavailable";
-type DialogKind = "workflow" | "run" | null;
+type DialogKind = "workflow" | "run" | "auth" | null;
 type ConsoleView = "overview" | "workflows" | "runs" | "activity" | "usage" | "connections";
 type ExecutionNodeData = { node: NodeRun };
 type ExecutionNode = Node<ExecutionNodeData, "execution">;
@@ -103,6 +103,7 @@ export function RelayDashboard() {
   const [runInput, setRunInput] = useState(`{ "prompt": "Explain why durable agent execution matters." }`);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [apiKey, setAPIKey] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeView, setActiveView] = useState<ConsoleView>("overview");
   const selectedRun = runs.find((run) => run.id === selectedRunID) ?? null;
@@ -130,6 +131,26 @@ export function RelayDashboard() {
       setConnection("unavailable");
       setError(reason instanceof Error ? reason.message : "Unable to reach Relay");
     }
+  }, []);
+
+  useEffect(() => {
+    let confirmationTimer: number | undefined;
+    const requireAuthentication = () => {
+      window.clearTimeout(confirmationTimer);
+      confirmationTimer = window.setTimeout(() => {
+        void fetch("/api/relay/workflows/?page_size=1", { cache: "no-store" }).then((response) => {
+          if (response.status === 401) {
+            setMutationError(null);
+            setDialog("auth");
+          }
+        }).catch(() => undefined);
+      }, 150);
+    };
+    window.addEventListener("relay:unauthorized", requireAuthentication);
+    return () => {
+      window.clearTimeout(confirmationTimer);
+      window.removeEventListener("relay:unauthorized", requireAuthentication);
+    };
   }, []);
 
   useEffect(() => {
@@ -219,6 +240,31 @@ export function RelayDashboard() {
     }
   };
 
+  const submitAuthentication = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setMutationError(null);
+    try {
+      const response = await fetch("/api/session", {
+        method: "POST",
+        cache: "no-store",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey }),
+      });
+      if (!response.ok) {
+        const problem = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        throw new Error(problem?.error?.message ?? "Unable to unlock Relay");
+      }
+      setAPIKey("");
+      setDialog(null);
+      await refresh();
+    } catch (reason) {
+      setMutationError(reason instanceof Error ? reason.message : "Unable to unlock Relay");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const terminalRuns = runs.filter((run) => ["succeeded", "failed", "cancelled"].includes(run.status));
   const successRate = terminalRuns.length === 0 ? "—" : `${((terminalRuns.filter((run) => run.status === "succeeded").length / terminalRuns.length) * 100).toFixed(1)}%`;
   const retries = nodes.reduce((total, node) => total + Math.max(0, node.current_attempt_no - 1), 0);
@@ -279,7 +325,7 @@ export function RelayDashboard() {
       <main className="workspace">
         <header className="topbar">
           <div><div className="title-row"><h1>{viewMeta[activeView][0]}</h1><span className={`runtime-pill ${connection}`}><i />{connection === "live" ? "Live" : connection === "loading" ? "Connecting" : "Unavailable"}</span></div><p>{viewMeta[activeView][1]}</p></div>
-          <div className="topbar-actions"><label className="search-box"><Search size={15} /><input aria-label="Search runs" placeholder="Search runs" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /></label><button className="icon-button" onClick={() => void refresh()} aria-label="Refresh"><RefreshCw size={17} /></button><button className="primary-action" onClick={openRunDialog} disabled={connection !== "live" || workflows.length === 0}><Play size={15} fill="currentColor" />New run</button></div>
+          <div className="topbar-actions"><label className="search-box"><Search size={15} /><input aria-label="Search runs" placeholder="Search runs" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /></label><button className="icon-button" onClick={() => { setMutationError(null); setDialog("auth"); }} aria-label="Unlock console"><KeyRound size={17} /></button><button className="icon-button" onClick={() => void refresh()} aria-label="Refresh"><RefreshCw size={17} /></button><button className="primary-action" onClick={openRunDialog} disabled={connection !== "live" || workflows.length === 0}><Play size={15} fill="currentColor" />New run</button></div>
         </header>
 
         {error ? <div className="system-banner"><span><Database size={16} />{error}</span><button onClick={() => void refresh()}>Retry connection</button></div> : null}
@@ -330,6 +376,8 @@ export function RelayDashboard() {
       {dialog === "workflow" ? <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}><section className="operator-dialog" role="dialog" aria-modal="true" aria-labelledby="workflow-dialog-title"><div className="dialog-heading"><div><span className="section-index">NEW</span><div><h2 id="workflow-dialog-title">Create workflow</h2><p>Relay validates and stores this DAG as immutable version 1.</p></div></div><button className="icon-button" onClick={() => setDialog(null)} aria-label="Close dialog"><X size={16} /></button></div><form onSubmit={submitWorkflow}><label>Name<input required minLength={1} maxLength={120} value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Research brief" /></label><label>Description<input maxLength={500} value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="Parallel research with a final synthesis" /></label><label>Workflow definition<textarea required spellCheck={false} rows={13} value={workflowDefinition} onChange={(event) => setWorkflowDefinition(event.target.value)} /></label>{mutationError ? <p className="form-error">{mutationError}</p> : null}<div className="dialog-actions"><button type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary-action" type="submit" disabled={submitting}><Plus size={15} />{submitting ? "Creating…" : "Create workflow"}</button></div></form></section></div> : null}
 
       {dialog === "run" ? <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}><section className="operator-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="run-dialog-title"><div className="dialog-heading"><div><span className="section-index">RUN</span><div><h2 id="run-dialog-title">Submit a run</h2><p>An idempotency key is generated for this submission.</p></div></div><button className="icon-button" onClick={() => setDialog(null)} aria-label="Close dialog"><X size={16} /></button></div><form onSubmit={submitRun}><label>Workflow<select required value={runWorkflowID} onChange={(event) => setRunWorkflowID(event.target.value)}>{workflows.map((workflow) => <option value={workflow.id} key={workflow.id}>{workflow.name}</option>)}</select></label><label>Run input<textarea required spellCheck={false} rows={8} value={runInput} onChange={(event) => setRunInput(event.target.value)} /></label>{mutationError ? <p className="form-error">{mutationError}</p> : null}<div className="dialog-actions"><button type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary-action" type="submit" disabled={submitting || !runWorkflowID}><Play size={15} />{submitting ? "Submitting…" : "Submit run"}</button></div></form></section></div> : null}
+
+      {dialog === "auth" ? <div className="dialog-backdrop" role="presentation"><section className="operator-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-dialog-title"><div className="dialog-heading"><div><span className="section-index">KEY</span><div><h2 id="auth-dialog-title">Unlock Relay</h2><p>The key is exchanged for an encrypted, HttpOnly session and is never stored in browser JavaScript.</p></div></div>{connection === "live" ? <button className="icon-button" onClick={() => setDialog(null)} aria-label="Close dialog"><X size={16} /></button> : null}</div><form onSubmit={submitAuthentication}><label>Relay API key<input required minLength={16} maxLength={512} type="password" autoComplete="current-password" value={apiKey} onChange={(event) => setAPIKey(event.target.value)} placeholder="Paste your Relay API key" /></label>{mutationError ? <p className="form-error">{mutationError}</p> : null}<div className="dialog-actions">{connection === "live" ? <button type="button" onClick={() => setDialog(null)}>Cancel</button> : null}<button className="primary-action" type="submit" disabled={submitting || apiKey.trim().length < 16}><KeyRound size={15} />{submitting ? "Unlocking…" : "Unlock console"}</button></div></form></section></div> : null}
     </div>
   );
 }
