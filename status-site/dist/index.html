@@ -17,23 +17,23 @@
         <span>Relay</span>
       </a>
       <div class="nav-actions">
-        <span class="live-pill"><span class="live-dot"></span>Build in progress</span>
+        <span class="live-pill"><span class="live-dot"></span>Engine verified</span>
         <a class="ghost-link" href="https://github.com/jonxsong/Relay" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
       </div>
     </header>
 
     <main id="main">
       <section class="hero shell" id="top">
-        <div class="eyebrow"><span>BUILD LOG</span><b>15</b><span>IN PROGRESS</span></div>
-        <h1>Building the engine<br /><em>agents can come home to.</em></h1>
-        <p class="lede">Relay is becoming a crash-safe, inspectable runtime for AI workflows. This page tracks what is real, what is verified, and what comes next.</p>
+        <div class="eyebrow"><span>BUILD LOG</span><b>50+</b><span>RELEASE CANDIDATE</span></div>
+        <h1>The engine is real.<br /><em>Public launch is next.</em></h1>
+        <p class="lede">Relay now executes immutable agent DAGs through a durable control plane, fenced workers, live event replay, provider and MCP boundaries, and a full operator console. Cloud provisioning is the remaining release step.</p>
         <div class="hero-actions">
           <a class="primary-button" href="#milestones">See the build</a>
           <a class="text-link" href="https://github.com/jonxsong/Relay/blob/main/README.md" target="_blank" rel="noreferrer">Read the fancy README <span>→</span></a>
         </div>
         <div class="status-strip" aria-label="Current project facts">
-          <div><strong>15</strong><span>checkpoints pushed</span></div>
-          <div><strong>84.4%</strong><span>domain coverage</span></div>
+          <div><strong>50+</strong><span>small commits pushed</span></div>
+          <div><strong>100%</strong><span>measured runs completed</span></div>
           <div><strong>Go 1.27.4</strong><span>pinned toolchain</span></div>
           <div><strong>Postgres 17</strong><span>source of truth</span></div>
         </div>
@@ -45,7 +45,7 @@
           <p>The architecture stays deliberately legible: durable decisions in Postgres, notifications in JetStream, and fenced execution in horizontally scalable workers.</p>
         </div>
         <figure class="architecture-card">
-          <img src="https://raw.githubusercontent.com/jonxsong/Relay/e24c5cc/docs/assets/relay-architecture.svg" alt="Relay architecture: clients enter the API, PostgreSQL owns durable state, the control plane publishes through JetStream, and fenced workers call OpenAI or allowlisted MCP tools" />
+          <img src="https://raw.githubusercontent.com/jonxsong/Relay/5faac59/docs/assets/relay-architecture.svg" alt="Relay architecture: clients enter the API, PostgreSQL owns durable state, the control plane publishes through JetStream, and fenced workers call OpenAI or allowlisted MCP tools" />
           <figcaption>One canonical diagram, rendered directly from the repository.</figcaption>
         </figure>
       </section>
@@ -66,19 +66,19 @@
           </article>
           <article class="milestone done">
             <div class="rail"><span>03</span></div>
-            <div class="milestone-copy"><div class="milestone-meta"><span>SHIPPED</span><code>8c5f672</code></div><h3>Durable backend slice</h3><p>PostgreSQL schema, workflow and run APIs, scheduler, outbox, JetStream, fenced workers, recovery, cancellation, and replayable SSE.</p><ul><li>Compose config validated</li><li>Unit suite passed</li><li>Postgres 17 CI gate</li></ul></div>
+            <div class="milestone-copy"><div class="milestone-meta"><span>SHIPPED</span><code>b340a0f</code></div><h3>Durable execution engine</h3><p>PostgreSQL schema, scheduler, outbox, JetStream, fenced workers, recovery, active cancellation, run and node deadlines, cost budgets, and replayable SSE.</p><ul><li>Crash recovery proven</li><li>Late workers rejected</li><li>Postgres 17 integration gate</li></ul></div>
+          </article>
+          <article class="milestone done">
+            <div class="rail"><span>04</span></div>
+            <div class="milestone-copy"><div class="milestone-meta"><span>SHIPPED</span><code>2b548b2</code></div><h3>Provider & tool boundaries</h3><p>OpenAI Responses, structured output validation, cancellation, usage and versioned pricing are paired with allowlisted MCP tools, schemas, approvals, SSRF defenses, and bounded results.</p><ul><li>Contract tests passed</li><li>Unknown pricing stays unknown</li><li>Tools fail closed</li></ul></div>
+          </article>
+          <article class="milestone done">
+            <div class="rail"><span>05</span></div>
+            <div class="milestone-copy"><div class="milestone-meta"><span>SHIPPED</span><code>55d0dda</code></div><h3>Developer console</h3><p>A dark operator console now authors and inspects workflows, renders live execution DAGs, drills into attempts, searches structured events, explains retries, tracks usage, and cancels active runs.</p><ul><li>Production build passed</li><li>Playwright flow passed</li><li>Encrypted browser session</li></ul></div>
           </article>
           <article class="milestone active">
-            <div class="rail"><span>04</span></div>
-            <div class="milestone-copy"><div class="milestone-meta"><span>IN PROGRESS</span><code>5e196e0</code></div><h3>Provider & tool boundaries</h3><p>The OpenAI Responses adapter, redacted retry classification, timeouts, and durable token usage are shipped. Safe MCP execution is next.</p><div class="progress" aria-label="Milestone four approximately 55 percent complete"><i style="width:55%"></i></div></div>
-          </article>
-          <article class="milestone queued">
-            <div class="rail"><span>05</span></div>
-            <div class="milestone-copy"><div class="milestone-meta"><span>NEXT</span></div><h3>Developer console</h3><p>Next.js workflow editor, live run DAG, attempts, logs, retries, usage, settings, and robust empty, loading, and error states.</p></div>
-          </article>
-          <article class="milestone queued">
             <div class="rail"><span>06</span></div>
-            <div class="milestone-copy"><div class="milestone-meta"><span>QUEUED</span></div><h3>Operational hardening & deployment</h3><p>Production auth, telemetry, rate limits, threat model, backup and recovery runbooks, load validation, and deployment to relay.jonzhang.dev.</p></div>
+            <div class="milestone-copy"><div class="milestone-meta"><span>DEPLOYMENT PENDING</span><code>5faac59</code></div><h3>Operational hardening & public launch</h3><p>Production auth, telemetry, rate limits, threat model, backup and recovery runbooks, dependency scanning, load validation, and a hardened public image are complete. Render provisioning and relay.jonzhang.dev DNS are the final external steps.</p><div class="progress" aria-label="Milestone six approximately 90 percent complete"><i style="width:90%"></i></div></div>
           </article>
         </div>
       </section>
