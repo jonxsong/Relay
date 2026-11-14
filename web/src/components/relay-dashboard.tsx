@@ -17,6 +17,7 @@ import {
   type Run, runListSchema, runSchema, type Usage, usageSchema, type Workflow,
   workflowListSchema, workflowSchema,
 } from "@/lib/contracts";
+import { relayClient } from "@/lib/openapi-client";
 import { relayGet, relayPost } from "@/lib/relay-api";
 
 type ConnectionState = "loading" | "live" | "unavailable";
@@ -194,8 +195,13 @@ export function RelayDashboard() {
   useEffect(() => {
     if (!selectedWorkflowID || connection !== "live") return;
     const controller = new AbortController();
-    void relayGet(`/workflows/${selectedWorkflowID}/`, workflowSchema, controller.signal)
-      .then(setSelectedWorkflow)
+    void relayClient.GET("/workflows/{workflowId}", {
+      params: { path: { workflowId: selectedWorkflowID } },
+      signal: controller.signal,
+    }).then(({ data, error: responseError }) => {
+      if (!data) throw new Error(responseError?.error.message ?? "Workflow definition unavailable");
+      setSelectedWorkflow(workflowSchema.parse(data));
+    })
       .catch((reason) => {
         if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Workflow definition unavailable");
       });
