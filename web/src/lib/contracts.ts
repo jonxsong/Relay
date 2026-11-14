@@ -48,6 +48,25 @@ export const nodeRunSchema = z.object({
   depends_on: z.array(z.string()),
 });
 
+export const nodeAttemptSchema = z.object({
+  id: z.uuid(),
+  node_run_id: z.uuid(),
+  attempt_no: z.number().int().positive(),
+  status: z.enum(["queued", "running", "succeeded", "failed", "cancelled", "expired"]),
+  worker_id: z.string().nullable().optional(),
+  fencing_token: z.number().int().positive(),
+  lease_expires_at: z.iso.datetime().nullable().optional(),
+  last_heartbeat_at: z.iso.datetime().nullable().optional(),
+  input: z.unknown(),
+  output: z.unknown().optional(),
+  error_code: z.string().nullable().optional(),
+  error_message: z.string().nullable().optional(),
+  retryable: z.boolean().nullable().optional(),
+  queued_at: z.iso.datetime(),
+  started_at: z.iso.datetime().nullable().optional(),
+  completed_at: z.iso.datetime().nullable().optional(),
+});
+
 export const eventSchema = z.object({
   id: z.uuid(),
   sequence: z.number().int(),
@@ -76,10 +95,12 @@ export const usageSchema = z.object({
 export const workflowListSchema = z.object({ items: z.array(workflowSchema) });
 export const runListSchema = z.object({ items: z.array(runSchema) });
 export const nodeListSchema = z.object({ items: z.array(nodeRunSchema) });
+export const nodeAttemptListSchema = z.object({ items: z.array(nodeAttemptSchema) });
 export const eventListSchema = z.object({ items: z.array(eventSchema) });
 
 export type Workflow = z.infer<typeof workflowSchema>;
 export type Run = z.infer<typeof runSchema>;
 export type NodeRun = z.infer<typeof nodeRunSchema>;
+export type NodeAttempt = z.infer<typeof nodeAttemptSchema>;
 export type ExecutionEvent = z.infer<typeof eventSchema>;
 export type Usage = z.infer<typeof usageSchema>;

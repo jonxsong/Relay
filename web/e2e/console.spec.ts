@@ -37,6 +37,10 @@ test("creates, executes, inspects, and cancels a workflow", async ({ page }) => 
   await page.getByRole("button", { name: "Overview" }).click();
   await expect(page.getByText("respond", { exact: true })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText(/Run .* · succeeded/)).toBeVisible({ timeout: 15_000 });
+  await page.locator(".react-flow__node").filter({ hasText: "respond" }).click();
+  const inspector = page.getByLabel("Node attempt inspector");
+  await expect(inspector.getByText("Attempt 1", { exact: true })).toBeVisible();
+  await inspector.getByRole("button", { name: "Close attempt inspector" }).click();
   await page.getByRole("button", { name: "Usage" }).click();
   await expect(page.getByText("relay-mock-v1")).toBeVisible();
 

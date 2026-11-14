@@ -13,7 +13,7 @@ import {
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-  eventListSchema, type ExecutionEvent, nodeListSchema, type NodeRun,
+  eventListSchema, type ExecutionEvent, nodeAttemptListSchema, type NodeAttempt, nodeListSchema, type NodeRun,
   type Run, runListSchema, runSchema, type Usage, usageSchema, type Workflow,
   workflowListSchema, workflowSchema,
 } from "@/lib/contracts";
@@ -82,6 +82,8 @@ export function RelayDashboard() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [selectedRunID, setSelectedRunID] = useState<string | null>(null);
   const [nodes, setNodes] = useState<NodeRun[]>([]);
+  const [selectedNodeID, setSelectedNodeID] = useState<string | null>(null);
+  const [attempts, setAttempts] = useState<NodeAttempt[]>([]);
   const [events, setEvents] = useState<ExecutionEvent[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("loading");
@@ -120,6 +122,8 @@ export function RelayDashboard() {
       setRuns(runData.items);
       if (runData.items.length === 0) {
         setNodes([]);
+        setSelectedNodeID(null);
+        setAttempts([]);
         setEvents([]);
         setUsage(null);
       }
@@ -177,6 +181,19 @@ export function RelayDashboard() {
     });
     return () => controller.abort();
   }, [selectedRunID, connection]);
+
+  useEffect(() => {
+    if (!selectedRunID || !selectedNodeID || connection !== "live") {
+      return;
+    }
+    const controller = new AbortController();
+    void relayGet(`/runs/${selectedRunID}/nodes/${selectedNodeID}/attempts`, nodeAttemptListSchema, controller.signal)
+      .then((data) => setAttempts(data.items))
+      .catch((reason) => {
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Attempt history unavailable");
+      });
+    return () => controller.abort();
+  }, [selectedRunID, selectedNodeID, connection, nodes]);
 
   useEffect(() => {
     if (!selectedRunID || !selectedRun || ["succeeded", "failed", "cancelled"].includes(selectedRun.status)) return;
@@ -343,7 +360,8 @@ export function RelayDashboard() {
         <section className="graph-section">
           <div className="section-bar"><div><span className="section-index">01</span><div><h2>Live execution graph</h2><p>{selectedRun ? `Run ${selectedRun.id.slice(0, 8)} · ${selectedRun.status}` : "Select a run to inspect its durable node state"}</p></div></div><div className="section-actions"><button><ListFilter size={15} />All nodes</button><button><GitBranch size={15} />Auto layout</button>{selectedRun && ["pending", "running"].includes(selectedRun.status) ? <button className="danger-action" onClick={() => void cancelSelectedRun()}><Ban size={14} />Cancel run</button> : null}</div></div>
           <div className="graph-card">
-            {flowNodes.length > 0 ? <ReactFlow nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes} fitView minZoom={0.45} maxZoom={1.8} nodesDraggable={false} nodesConnectable={false}><Background color="#34354b" gap={24} size={1} /><Controls showInteractive={false} /><MiniMap nodeColor={(node) => statusColor[(node.data as ExecutionNodeData).node.status] ?? statusColor.pending} maskColor="rgba(8,9,15,.72)" /></ReactFlow> : <div className="graph-empty"><div><WorkflowIcon size={28} /></div><h3>{connection === "live" ? "No execution nodes yet" : "Connect the Relay backend"}</h3><p>{connection === "live" ? "Create a workflow and submit a run. Its durable node states will appear here in real time." : "Start the API, control plane, worker, PostgreSQL, and NATS stack to populate this console with real execution data."}</p><button className="primary-action" onClick={() => { setMutationError(null); setDialog("workflow"); }} disabled={connection !== "live"}><WorkflowIcon size={15} />Create workflow</button></div>}
+            {flowNodes.length > 0 ? <ReactFlow nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes} fitView minZoom={0.45} maxZoom={1.8} nodesDraggable={false} nodesConnectable={false} onNodeClick={(_, node) => { setAttempts([]); setSelectedNodeID(node.id); }}><Background color="#34354b" gap={24} size={1} /><Controls showInteractive={false} /><MiniMap nodeColor={(node) => statusColor[(node.data as ExecutionNodeData).node.status] ?? statusColor.pending} maskColor="rgba(8,9,15,.72)" /></ReactFlow> : <div className="graph-empty"><div><WorkflowIcon size={28} /></div><h3>{connection === "live" ? "No execution nodes yet" : "Connect the Relay backend"}</h3><p>{connection === "live" ? "Create a workflow and submit a run. Its durable node states will appear here in real time." : "Start the API, control plane, worker, PostgreSQL, and NATS stack to populate this console with real execution data."}</p><button className="primary-action" onClick={() => { setMutationError(null); setDialog("workflow"); }} disabled={connection !== "live"}><WorkflowIcon size={15} />Create workflow</button></div>}
+            {selectedNodeID ? <aside className="attempt-inspector" aria-label="Node attempt inspector"><header><div><span>NODE ATTEMPTS</span><strong>{nodes.find((node) => node.id === selectedNodeID)?.node_key ?? selectedNodeID.slice(0, 8)}</strong></div><button onClick={() => { setAttempts([]); setSelectedNodeID(null); }} aria-label="Close attempt inspector"><X size={15} /></button></header><div className="attempt-list">{attempts.length === 0 ? <p>No attempt has been queued for this node.</p> : attempts.slice().reverse().map((attempt) => <article key={attempt.id}><div><span>Attempt {attempt.attempt_no}</span><b className={`attempt-status ${attempt.status}`}>{attempt.status}</b></div><dl><div><dt>Fence</dt><dd>{attempt.fencing_token}</dd></div><div><dt>Worker</dt><dd>{attempt.worker_id ?? "unclaimed"}</dd></div><div><dt>Queued</dt><dd>{new Date(attempt.queued_at).toLocaleTimeString()}</dd></div><div><dt>Duration</dt><dd>{attempt.started_at ? `${Math.max(0, Math.round(((attempt.completed_at ? Date.parse(attempt.completed_at) : updatedAt?.getTime() ?? Date.parse(attempt.started_at)) - Date.parse(attempt.started_at)) / 1000))}s` : "—"}</dd></div></dl>{attempt.error_message ? <p className="attempt-error"><strong>{attempt.error_code ?? "execution_failed"}</strong>{attempt.error_message}</p> : null}<details><summary>Structured input</summary><pre>{JSON.stringify(attempt.input, null, 2)}</pre></details>{attempt.output !== undefined ? <details><summary>Structured output</summary><pre>{JSON.stringify(attempt.output, null, 2)}</pre></details> : null}</article>)}</div></aside> : null}
             <div className="graph-legend">{["running", "succeeded", "failed", "queued"].map((status) => <span key={status}><i style={{ background: statusColor[status] }} />{status}</span>)}</div>
           </div>
         </section>
