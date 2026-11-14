@@ -23,9 +23,9 @@ Relay protects workflow definitions, run inputs and outputs, provider credential
 | SSRF through MCP | HTTPS rules, hostname and resolved-address checks, redirect denial, connection allowlists | DNS may change after validation; network egress policy remains recommended |
 | Secret disclosure | Secret references, file/env loading, redacted errors, no credentials in workflow JSON | Process environment and host administrators remain trusted |
 | Malicious LLM/tool output | JSON schema validation, local revalidation, bounded outputs, no arbitrary shell | Semantic prompt injection can still influence allowed tools |
-| Resource exhaustion | Request and output limits, workflow node/depth limits, concurrency and retry bounds | Per-principal rate limiting is still planned |
+| Resource exhaustion | Per-principal request rate limit, payload/output bounds, workflow node/depth limits, concurrency and retry bounds | The limiter is process-local; multi-instance deployments need a shared edge limit |
 | Event/data tampering | Database constraints, append-only event API, owner-scoped replay | A database administrator can alter records |
-| Browser credential theft | No production key is embedded in the image | A key entered into a compromised browser can be stolen |
+| Browser credential theft | Key exchanged once for an encrypted, HttpOnly, SameSite=Strict session cookie | A key entered into a compromised browser can still be stolen at entry time |
 
 ## Security invariants
 
@@ -50,4 +50,4 @@ Relay protects workflow definitions, run inputs and outputs, provider credential
 
 ## Known limitations
 
-Relay currently uses one configured production owner and bearer key. Browser session management, per-user roles, audited key creation/revocation, distributed rate limiting, and managed secret-store integrations remain future work. The console must not embed the backend key in a public image or repository.
+Relay currently uses one configured production owner and bearer key. The browser session is encrypted and time-bounded, but per-user roles, audited key creation/revocation, distributed rate limiting, and managed secret-store integrations remain future work. The public evaluation topology co-locates NATS and the Relay processes on one instance and is not horizontally scalable. The console never embeds the backend key in a public image or repository.

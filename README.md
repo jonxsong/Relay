@@ -12,7 +12,7 @@
 </div>
 
 > [!IMPORTANT]
-> Relay is under active construction. The durable backend, live developer console, production bearer boundary, OpenAI adapter, and guarded MCP boundary are runnable. Integration, browser, load, and deployment-hardening acceptance suites are still being completed; do not treat this release as production-ready yet.
+> Relay is an active pre-1.0 project. The durable runtime, operator console, production authentication boundary, OpenAI adapter, guarded MCP boundary, integration/browser suites, load harness, and public evaluation image are runnable. Review the documented single-owner and single-instance evaluation limitations before using it for sensitive production workloads.
 
 Relay turns an immutable workflow definition into a durable, inspectable run. PostgreSQL owns the truth. NATS JetStream wakes workers up. Every claim is fenced, every retry is bounded, and every user-visible state change is recorded as a replayable event.
 
@@ -67,7 +67,7 @@ curl http://localhost:8080/api/v1/health/ready
 
 The console creates workflows and submits real runs; it does not seed fake metrics. In production set `RELAY_ENV=production` and provide a one-line `RELAY_API_KEY` (or mounted `RELAY_API_KEY_FILE`) with at least 32 random characters. Development mode uses the configured local developer identity.
 
-The deterministic mock model is the default. To opt into OpenAI, set `RELAY_PROVIDER=openai` and provide `OPENAI_API_KEY` or mount a secret file through `OPENAI_API_KEY_FILE`. Optional structured outputs are checked again locally after the provider responds. Pricing is loaded only from a versioned file selected by `RELAY_PRICING_FILE`; [`config/pricing.example.json`](config/pricing.example.json) intentionally contains no invented rates, so unknown costs stay unknown. Tool nodes remain fail-closed unless `RELAY_MCP_CONFIG_FILE` points to an explicit connection and tool allowlist; use [`config/mcp.example.json`](config/mcp.example.json) as the schema. Secrets are referenced by environment-variable name and are never stored in workflow JSON.
+The deterministic mock model is the default. To opt into OpenAI, set `RELAY_PROVIDER=openai` and provide `OPENAI_API_KEY` or mount a secret file through `OPENAI_API_KEY_FILE`; follow the [paid-provider smoke-test procedure](docs/provider-smoke-test.md). Optional structured outputs are checked again locally after the provider responds. Pricing is loaded only from a versioned file selected by `RELAY_PRICING_FILE`; [`config/pricing.example.json`](config/pricing.example.json) intentionally contains no invented rates, so unknown costs stay unknown. Tool nodes remain fail-closed unless `RELAY_MCP_CONFIG_FILE` points to an explicit connection and tool allowlist; use [`config/mcp.example.json`](config/mcp.example.json) as the schema. Secrets are referenced by environment-variable name and are never stored in workflow JSON.
 
 ## The execution contract
 
@@ -133,7 +133,7 @@ Relay provides durable state transitions and duplicate-safe execution bookkeepin
 - Side-effecting tools require an explicit permission decision.
 - Logs, traces, and API errors pass through redaction.
 
-The full threat model and deployment hardening guide will be acceptance-gated before the production-ready milestone.
+See the acceptance-gated [threat model](docs/threat-model.md) and [deployment hardening guide](docs/deployment.md) before exposing Relay to a network.
 
 ## Project status
 
@@ -143,12 +143,13 @@ The full threat model and deployment hardening guide will be acceptance-gated be
 | Domain invariants | 🟢 Implemented and unit tested |
 | Durable scheduler and recovery | 🟢 Crash window, lease recovery, stale completion, and duplicate claims integration-tested |
 | OpenAI adapter | 🟢 Implemented and contract tested |
-| MCP adapter | 🟡 Allowlist, schema, approval, SSRF, and size gates implemented; live smoke test pending |
-| Developer console | 🟢 Live overview, DAG, events, usage, create, run, and cancel actions |
+| MCP adapter | 🟢 Allowlist, schema, approval, SSRF, timeout, redaction, and size gates contract-tested |
+| Developer console | 🟢 Authoring preview, immutable DAG viewer, live runs, attempts, searchable events, retries, usage, and settings |
 | Production authentication | 🟢 Constant-time bearer validation and encrypted HttpOnly console sessions |
 | Observability | 🟢 Prometheus metrics and optional OTLP/HTTP traces across all services |
 | OpenAPI 3.1 | 🟢 Published and linted |
 | Integration, browser, and load tests | 🟢 Passing; factual local benchmark results published |
+| Public deployment | 🟡 Render image and Blueprint smoke-tested; cloud provisioning requires operator credentials |
 
 ## Contributing
 
