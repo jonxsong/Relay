@@ -9,13 +9,13 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/relay-api ./cmd/ap
     && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/relay-worker ./cmd/worker \
     && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/goose github.com/pressly/goose/v3/cmd/goose
 
-FROM node:24-alpine AS web-dependencies
+FROM node:26-alpine AS web-dependencies
 WORKDIR /web
 RUN corepack enable
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
-FROM node:24-alpine AS web-build
+FROM node:26-alpine AS web-build
 WORKDIR /web
 RUN corepack enable
 COPY --from=web-dependencies /web/node_modules ./node_modules
@@ -24,7 +24,7 @@ RUN pnpm build
 
 FROM nats:2.11-alpine AS nats
 
-FROM node:24-alpine AS runtime
+FROM node:26-alpine AS runtime
 ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     RELAY_API_URL=http://127.0.0.1:8080/api/v1 \
