@@ -63,6 +63,43 @@ WHERE wv.workflow_id = sqlc.arg(workflow_id)
 ORDER BY wv.version DESC
 LIMIT 1;
 
+-- name: TryCreateIdempotencyKey :one
+INSERT INTO idempotency_keys (
+    owner_id,
+    scope,
+    key,
+    request_sha256,
+    locked_until,
+    expires_at
+)
+VALUES (
+    sqlc.arg(owner_id),
+    sqlc.arg(scope),
+    sqlc.arg(key),
+    sqlc.arg(request_sha256),
+    sqlc.arg(locked_until),
+    sqlc.arg(expires_at)
+)
+ON CONFLICT (owner_id, scope, key) DO NOTHING
+RETURNING id;
+
+-- name: LockIdempotencyKey :one
+SELECT *
+FROM idempotency_keys
+WHERE owner_id = sqlc.arg(owner_id)
+  AND scope = sqlc.arg(scope)
+  AND key = sqlc.arg(key)
+FOR UPDATE;
+
+-- name: CompleteIdempotencyKey :execrows
+UPDATE idempotency_keys
+SET response_status = sqlc.arg(response_status),
+    response_body = sqlc.arg(response_body),
+    resource_id = sqlc.arg(resource_id),
+    locked_until = now()
+WHERE id = sqlc.arg(id)
+  AND resource_id IS NULL;
+
 -- name: CreateWorkflowRun :one
 INSERT INTO workflow_runs (
     workflow_version_id,
@@ -97,6 +134,11 @@ FROM workflow_runs
 WHERE id = sqlc.arg(id)
   AND owner_id = sqlc.arg(owner_id);
 
+-- name: GetRunByID :one
+SELECT *
+FROM workflow_runs
+WHERE id = sqlc.arg(id);
+
 -- name: ListRuns :many
 SELECT *
 FROM workflow_runs
@@ -113,6 +155,14 @@ JOIN workflow_runs wr ON wr.id = nr.run_id
 WHERE nr.run_id = sqlc.arg(run_id)
   AND wr.owner_id = sqlc.arg(owner_id)
 ORDER BY nr.created_at, nr.node_key;
+
+-- name: ListRunUsage :many
+SELECT ur.*
+FROM usage_records ur
+JOIN workflow_runs wr ON wr.id = ur.run_id
+WHERE ur.run_id = sqlc.arg(run_id)
+  AND wr.owner_id = sqlc.arg(owner_id)
+ORDER BY ur.recorded_at, ur.id;
 
 -- name: RequestRunCancellation :one
 UPDATE workflow_runs

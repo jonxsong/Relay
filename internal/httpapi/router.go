@@ -20,6 +20,7 @@ type ReadinessChecker interface {
 type Dependencies struct {
 	Readiness       ReadinessChecker
 	Workflows       WorkflowRepository
+	Runs            RunRepository
 	DevelopmentUser uuid.UUID
 	MaxRequestBytes int64
 }
@@ -43,6 +44,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		api.Group(func(authenticated chi.Router) {
 			authenticated.Use(developmentAuth(deps.DevelopmentUser))
 			mountWorkflowRoutes(authenticated, deps.Workflows)
+			mountRunRoutes(authenticated, deps.Runs)
 		})
 	})
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {

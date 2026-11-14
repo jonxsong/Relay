@@ -132,6 +132,36 @@ func (q *Queries) ClaimNodeAttempt(ctx context.Context, arg ClaimNodeAttemptPara
 	return i, err
 }
 
+const completeIdempotencyKey = `-- name: CompleteIdempotencyKey :execrows
+UPDATE idempotency_keys
+SET response_status = $1,
+    response_body = $2,
+    resource_id = $3,
+    locked_until = now()
+WHERE id = $4
+  AND resource_id IS NULL
+`
+
+type CompleteIdempotencyKeyParams struct {
+	ResponseStatus *int32      `json:"response_status"`
+	ResponseBody   []byte      `json:"response_body"`
+	ResourceID     pgtype.UUID `json:"resource_id"`
+	ID             uuid.UUID   `json:"id"`
+}
+
+func (q *Queries) CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeIdempotencyKey,
+		arg.ResponseStatus,
+		arg.ResponseBody,
+		arg.ResourceID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const completeNodeAttempt = `-- name: CompleteNodeAttempt :one
 UPDATE node_attempts
 SET status = $1,
@@ -523,6 +553,36 @@ func (q *Queries) GetRun(ctx context.Context, arg GetRunParams) (WorkflowRun, er
 	return i, err
 }
 
+const getRunByID = `-- name: GetRunByID :one
+SELECT id, workflow_version_id, owner_id, status, input, output, error_code, error_message, cost_budget_microusd, deadline_at, cancel_requested_at, started_at, completed_at, created_at, updated_at, next_event_sequence
+FROM workflow_runs
+WHERE id = $1
+`
+
+func (q *Queries) GetRunByID(ctx context.Context, id uuid.UUID) (WorkflowRun, error) {
+	row := q.db.QueryRow(ctx, getRunByID, id)
+	var i WorkflowRun
+	err := row.Scan(
+		&i.ID,
+		&i.WorkflowVersionID,
+		&i.OwnerID,
+		&i.Status,
+		&i.Input,
+		&i.Output,
+		&i.ErrorCode,
+		&i.ErrorMessage,
+		&i.CostBudgetMicrousd,
+		&i.DeadlineAt,
+		&i.CancelRequestedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.NextEventSequence,
+	)
+	return i, err
+}
+
 const getWorkflow = `-- name: GetWorkflow :one
 SELECT id, owner_id, name, description, created_at, updated_at, deleted_at
 FROM workflows
@@ -620,6 +680,52 @@ func (q *Queries) ListRunNodes(ctx context.Context, arg ListRunNodesParams) ([]N
 			&i.CompletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRunUsage = `-- name: ListRunUsage :many
+SELECT ur.id, ur.run_id, ur.node_attempt_id, ur.provider, ur.model, ur.pricing_version, ur.input_tokens, ur.output_tokens, ur.cost_microusd, ur.metadata, ur.recorded_at
+FROM usage_records ur
+JOIN workflow_runs wr ON wr.id = ur.run_id
+WHERE ur.run_id = $1
+  AND wr.owner_id = $2
+ORDER BY ur.recorded_at, ur.id
+`
+
+type ListRunUsageParams struct {
+	RunID   uuid.UUID `json:"run_id"`
+	OwnerID uuid.UUID `json:"owner_id"`
+}
+
+func (q *Queries) ListRunUsage(ctx context.Context, arg ListRunUsageParams) ([]UsageRecord, error) {
+	rows, err := q.db.Query(ctx, listRunUsage, arg.RunID, arg.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UsageRecord{}
+	for rows.Next() {
+		var i UsageRecord
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.NodeAttemptID,
+			&i.Provider,
+			&i.Model,
+			&i.PricingVersion,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.CostMicrousd,
+			&i.Metadata,
+			&i.RecordedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -787,6 +893,40 @@ func (q *Queries) LockExpiredAttempts(ctx context.Context, batchSize int32) ([]N
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockIdempotencyKey = `-- name: LockIdempotencyKey :one
+SELECT id, owner_id, scope, key, request_sha256, response_status, response_body, resource_id, locked_until, expires_at, created_at
+FROM idempotency_keys
+WHERE owner_id = $1
+  AND scope = $2
+  AND key = $3
+FOR UPDATE
+`
+
+type LockIdempotencyKeyParams struct {
+	OwnerID uuid.UUID `json:"owner_id"`
+	Scope   string    `json:"scope"`
+	Key     string    `json:"key"`
+}
+
+func (q *Queries) LockIdempotencyKey(ctx context.Context, arg LockIdempotencyKeyParams) (IdempotencyKey, error) {
+	row := q.db.QueryRow(ctx, lockIdempotencyKey, arg.OwnerID, arg.Scope, arg.Key)
+	var i IdempotencyKey
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Scope,
+		&i.Key,
+		&i.RequestSha256,
+		&i.ResponseStatus,
+		&i.ResponseBody,
+		&i.ResourceID,
+		&i.LockedUntil,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const lockPendingOutboxEvents = `-- name: LockPendingOutboxEvents :many
@@ -1115,4 +1255,48 @@ func (q *Queries) ScheduleNodeRetry(ctx context.Context, arg ScheduleNodeRetryPa
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const tryCreateIdempotencyKey = `-- name: TryCreateIdempotencyKey :one
+INSERT INTO idempotency_keys (
+    owner_id,
+    scope,
+    key,
+    request_sha256,
+    locked_until,
+    expires_at
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+ON CONFLICT (owner_id, scope, key) DO NOTHING
+RETURNING id
+`
+
+type TryCreateIdempotencyKeyParams struct {
+	OwnerID       uuid.UUID          `json:"owner_id"`
+	Scope         string             `json:"scope"`
+	Key           string             `json:"key"`
+	RequestSha256 string             `json:"request_sha256"`
+	LockedUntil   pgtype.Timestamptz `json:"locked_until"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) TryCreateIdempotencyKey(ctx context.Context, arg TryCreateIdempotencyKeyParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, tryCreateIdempotencyKey,
+		arg.OwnerID,
+		arg.Scope,
+		arg.Key,
+		arg.RequestSha256,
+		arg.LockedUntil,
+		arg.ExpiresAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
