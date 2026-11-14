@@ -108,6 +108,29 @@ jobs:
       - run: pnpm lint
       - run: pnpm build
 
+  security:
+    name: Dependency vulnerability scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Scan Go call graph
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: Audit production JavaScript dependencies
+        run: pnpm --dir web audit --prod --audit-level=high
+
   integration:
     name: PostgreSQL and NATS vertical slice
     runs-on: ubuntu-latest
