@@ -9,7 +9,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/relay-api ./cmd/ap
     && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/relay-worker ./cmd/worker \
     && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/goose github.com/pressly/goose/v3/cmd/goose
 
-FROM alpine:3.22
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S relay \
     && adduser -S -G relay -h /app relay
