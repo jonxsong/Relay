@@ -2,6 +2,14 @@
 
 This guide describes a single-host deployment suitable for evaluation. It is not a substitute for a platform-specific security review.
 
+## Public evaluation deployment
+
+[`render.yaml`](../render.yaml) defines a no-secret-in-source Render Blueprint for `relay.jonzhang.dev`. It creates a private Render PostgreSQL database and one public web service from [`deploy/render.Dockerfile`](../deploy/render.Dockerfile). Render generates separate 256-bit Relay and browser-session secrets, terminates TLS, and exposes only the Next.js console.
+
+The evaluation image co-locates the API, control plane, one worker, and an ephemeral JetStream process so it can run on a single free web instance. PostgreSQL remains authoritative, so loss of the local JetStream store does not lose workflow state; the outbox republishes unfinished work. This topology is intentionally not horizontally scalable. Use the multi-service Compose topology below—or split the same binaries into private services—for sustained production workloads.
+
+Create the Blueprint from the repository, wait for the `relay-console` health check to pass, and use the custom-domain verification values Render displays. Keep the generated `RELAY_API_KEY` private: it unlocks execution, while the public URL remains safe to visit without it.
+
 ## Prerequisites
 
 - A Linux host with Docker Engine and Compose v2

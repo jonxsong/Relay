@@ -6,7 +6,17 @@ const sessionTTL = 8 * 60 * 60;
 
 function sameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
-  return !origin || origin === request.nextUrl.origin;
+  if (!origin) return true;
+  try {
+    const originURL = new URL(origin);
+    const forwardedHost = request.headers.get("x-forwarded-host")?.split(",", 1)[0]?.trim();
+    const requestHost = forwardedHost || request.headers.get("host") || request.nextUrl.host;
+    const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",", 1)[0]?.trim();
+    const requestProtocol = forwardedProtocol || request.nextUrl.protocol.replace(":", "");
+    return originURL.host === requestHost && originURL.protocol === `${requestProtocol}:`;
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(request: NextRequest) {

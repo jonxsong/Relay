@@ -146,6 +146,7 @@ export function RelayDashboard() {
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [activeView, setActiveView] = useState<ConsoleView>("overview");
   const selectedRun = runs.find((run) => run.id === selectedRunID) ?? null;
+  const selectedRunStatus = selectedRun?.status ?? null;
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     setConnection("loading");
@@ -249,14 +250,18 @@ export function RelayDashboard() {
   }, [selectedRunID, selectedNodeID, connection, nodes]);
 
   useEffect(() => {
-    if (!selectedRunID || !selectedRun || ["succeeded", "failed", "cancelled"].includes(selectedRun.status)) return;
+    if (!selectedRunID || !selectedRunStatus || ["succeeded", "failed", "cancelled"].includes(selectedRunStatus)) return;
     const stream = new EventSource(`/api/relay/runs/${selectedRunID}/stream`);
     const eventTypes = ["run.started", "run.succeeded", "run.failed", "run.cancelled", "node.queued", "node.running", "node.succeeded", "node.failed", "node.retry_scheduled", "node.cancelled"];
-    const update = () => void refresh();
+    let refreshTimer: number | undefined;
+    const update = () => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => void refresh(), 75);
+    };
     for (const eventType of eventTypes) stream.addEventListener(eventType, update);
     stream.onerror = () => stream.close();
-    return () => stream.close();
-  }, [selectedRunID, selectedRun, refresh]);
+    return () => { window.clearTimeout(refreshTimer); stream.close(); };
+  }, [selectedRunID, selectedRunStatus, refresh]);
 
   const openRunDialog = () => {
     setRunWorkflowID((current) => current || workflows[0]?.id || "");
