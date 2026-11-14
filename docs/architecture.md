@@ -21,7 +21,8 @@ Relay is a distributed state machine for immutable agent-workflow DAGs. It separ
 7. Per-run event sequence numbers increase monotonically.
 8. Cancellation prevents new scheduling and makes late completions harmless.
 9. Exhausted required nodes fail the run; descendants that cannot execute are skipped.
-10. Secrets never appear in workflow JSON, application logs, traces, events, or API errors.
+10. Run deadlines, node deadlines, and known-cost budgets terminate work durably and fence late workers.
+11. Secrets never appear in workflow JSON, application logs, traces, events, or API errors.
 
 ## Delivery semantics
 
@@ -35,9 +36,13 @@ For each candidate node, the scheduler locks its run and relevant node rows, che
 
 ## Claim and completion
 
-A worker receiving a task message attempts to claim the referenced queued attempt. Claiming sets the worker identity, lease deadline, and a new fencing token in one transaction. Completion compares the token and current status before writing output, usage, events, and newly schedulable work. A stale completion receives a conflict and is discarded.
+A worker receiving a task message attempts to claim the referenced queued attempt. Claiming sets the worker identity, lease deadline, immutable node timeout, optional run deadline, and a new fencing token in one transaction. The worker uses the earliest applicable deadline. Completion compares the token and current status before writing output, usage, events, and newly schedulable work. A stale completion receives a conflict and is discarded.
 
 ## Recovery
 
-The recovery loop scans an indexed lease deadline. Expired retryable work is moved through bounded exponential backoff with jitter. Non-retryable or exhausted work fails terminally and propagates failure to the run. The loop is safe to run concurrently because it uses row locks and state predicates.
+The recovery loop scans an indexed lease deadline. Expired retryable work is moved through bounded exponential backoff with jitter. Non-retryable or exhausted work fails terminally and propagates failure to the run. The same control-plane pass terminally fails overdue runs. Cancellation, deadlines, and known-cost budget exhaustion fence active attempts so worker completions cannot resurrect stopped work. The loop is safe to run concurrently because it uses row locks and state predicates.
+
+## Cost budgets
+
+Configured provider costs are recorded with a pricing-version reference and summed in the same serializable transaction that commits a node result. If known cost exceeds the run budget, Relay preserves the completed node and fails remaining work with `cost_budget_exceeded`. Unknown pricing stays unknown and is never estimated, so operators should pair budgets with a versioned pricing catalog when strict monetary enforcement is required.
 

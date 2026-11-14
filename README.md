@@ -141,7 +141,7 @@ See the acceptance-gated [threat model](docs/threat-model.md) and [deployment ha
 | --- | --- |
 | Architecture and ADRs | 🟢 Implemented |
 | Domain invariants | 🟢 Implemented and unit tested |
-| Durable scheduler and recovery | 🟢 Crash window, lease recovery, stale completion, and duplicate claims integration-tested |
+| Durable scheduler and recovery | 🟢 Crash window, lease recovery, active cancellation, run/node deadlines, cost budgets, stale completion, and duplicate claims integration-tested |
 | OpenAI adapter | 🟢 Implemented and contract tested |
 | MCP adapter | 🟢 Allowlist, schema, approval, SSRF, timeout, redaction, and size gates contract-tested |
 | Developer console | 🟢 Authoring preview, immutable DAG viewer, live runs, attempts, searchable events, retries, usage, and settings |

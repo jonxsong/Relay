@@ -49,7 +49,8 @@ The build is organized as reviewable vertical milestones. Each milestone must ke
 | --- | --- |
 | Domain and API unit suite | `go vet ./...` and `go test ./...` passed |
 | Data-race suite | `go test -race ./...` passed in `golang:1.27.4-bookworm` |
-| Failure recovery | Real PostgreSQL test passed: outbox crash window, redelivery, duplicate claims, lease expiry, stale completion rejection, and recovered completion |
+| Failure recovery | Real PostgreSQL tests passed: outbox crash window, redelivery, duplicate claims, lease expiry, stale completion rejection, active cancellation fencing, run/node deadlines, and recovered completion |
+| Cost controls | Real PostgreSQL test passed: known provider cost over budget terminates the run and fences remaining work |
 | Durable vertical slice | Real PostgreSQL + NATS run passed in 15.52s, including idempotent replay/conflict and ordered event replay |
 | API contract | Generated TypeScript client matches `docs/openapi.yaml` |
 | Developer console | TypeScript, ESLint, production build, and Playwright create/run/inspect/search/settings/cancel flow passed |
