@@ -59,7 +59,8 @@ services:
     environment: &relay-environment
       DATABASE_URL: postgres://${POSTGRES_USER:-relay}:${POSTGRES_PASSWORD:-relay-local-only}@postgres:5432/${POSTGRES_DB:-relay}?sslmode=disable
       NATS_URL: nats://nats:4222
-      RELAY_ENV: development
+      RELAY_ENV: ${RELAY_ENV:-development}
+      RELAY_API_KEY: ${RELAY_API_KEY:-}
       RELAY_LOG_LEVEL: ${RELAY_LOG_LEVEL:-info}
       RELAY_PROVIDER: ${RELAY_PROVIDER:-mock}
       RELAY_GLOBAL_CONCURRENCY: ${RELAY_GLOBAL_CONCURRENCY:-100}
@@ -105,6 +106,21 @@ services:
       migrate:
         condition: service_completed_successfully
       nats:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      RELAY_API_URL: http://api:8080/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
