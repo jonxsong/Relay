@@ -28,6 +28,15 @@ func TestIntegrationRecoversCrashWindowAndRejectsStaleWorkers(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer database.Close()
+	for {
+		drained, err := database.DispatchOutbox(ctx, 1000, func(context.Context, db.OutboxEvent) error { return nil })
+		if err != nil {
+			t.Fatalf("drain prior test outbox: %v", err)
+		}
+		if drained == 0 {
+			break
+		}
+	}
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	user, err := database.EnsureDevelopmentUser(ctx, "durability-"+suffix+"@relay.local", "Durability Test")
