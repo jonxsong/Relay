@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jonxsong/Relay/internal/domain"
 )
@@ -34,11 +35,22 @@ func (e *ExecutionError) Unwrap() error {
 	return e.Err
 }
 
-type DeterministicMock struct{}
+type DeterministicMock struct {
+	Delay time.Duration
+}
 
-func (DeterministicMock) Execute(ctx context.Context, nodeType string, input json.RawMessage) (ExecutionResult, error) {
+func (m DeterministicMock) Execute(ctx context.Context, nodeType string, input json.RawMessage) (ExecutionResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ExecutionResult{}, &ExecutionError{Code: "cancelled", Retryable: true, Err: err}
+	}
+	if m.Delay > 0 {
+		timer := time.NewTimer(m.Delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return ExecutionResult{}, &ExecutionError{Code: "cancelled", Retryable: true, Err: ctx.Err()}
+		case <-timer.C:
+		}
 	}
 	var value map[string]any
 	if err := json.Unmarshal(input, &value); err != nil {

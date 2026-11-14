@@ -32,6 +32,7 @@ type Config struct {
 	PricingFile         string
 	APIKey              string
 	RateLimitPerMinute  int
+	MockDelay           time.Duration
 }
 
 func Load() (Config, error) {
@@ -94,6 +95,14 @@ func Load() (Config, error) {
 		PricingFile:         stringEnv("RELAY_PRICING_FILE", ""),
 		RateLimitPerMinute:  600,
 	}
+	mockDelay, err := durationEnv("RELAY_MOCK_DELAY", 0)
+	if err != nil {
+		return Config{}, err
+	}
+	if mockDelay < 0 || mockDelay > 10*time.Second {
+		return Config{}, errors.New("RELAY_MOCK_DELAY must be between 0 and 10s")
+	}
+	cfg.MockDelay = mockDelay
 	rateLimit, err := int64Env("RELAY_RATE_LIMIT_PER_MINUTE", 600)
 	if err != nil {
 		return Config{}, err

@@ -46,7 +46,7 @@ func run() error {
 		hostname = "unknown-host"
 	}
 	workerID := fmt.Sprintf("%s-%d", hostname, os.Getpid())
-	localExecutor := worker.DeterministicMock{}
+	localExecutor := worker.DeterministicMock{Delay: cfg.MockDelay}
 	var llmExecutor worker.Executor = localExecutor
 	if cfg.Provider == "openai" {
 		var pricing *ai.PricingCatalog

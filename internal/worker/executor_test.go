@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestDeterministicMockIsStable(t *testing.T) {
@@ -30,5 +31,16 @@ func TestDeterministicMockRefusesUnconfiguredTools(t *testing.T) {
 	var executionError *ExecutionError
 	if !errors.As(err, &executionError) || executionError.Code != "tool_not_configured" || executionError.Retryable {
 		t.Fatalf("Execute() error = %#v", err)
+	}
+}
+
+func TestDeterministicMockDelayHonorsCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	_, err := (DeterministicMock{Delay: time.Second}).Execute(ctx, "llm", json.RawMessage(`{}`))
+	var executionError *ExecutionError
+	if !errors.As(err, &executionError) || executionError.Code != "cancelled" {
+		t.Fatalf("Execute() error = %v, want cancelled ExecutionError", err)
 	}
 }

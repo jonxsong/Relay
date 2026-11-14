@@ -129,7 +129,9 @@ jobs:
       DATABASE_URL: postgres://relay:relay-ci@localhost:5432/relay?sslmode=disable
       NATS_URL: nats://localhost:4222
       RELAY_PROVIDER: mock
+      RELAY_MOCK_DELAY: 2s
       RELAY_INTEGRATION_BASE_URL: http://127.0.0.1:8080/api/v1
+      RELAY_API_URL: http://127.0.0.1:8080/api/v1
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -164,4 +166,16 @@ jobs:
           exit 1
       - name: Exercise durable execution
         run: go test -tags=integration -count=1 -v ./integration
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm --dir web install --frozen-lockfile
+      - run: pnpm --dir web exec playwright install --with-deps chromium
+      - name: Exercise browser console
+        run: pnpm --dir web test:e2e
 
