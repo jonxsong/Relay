@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1260 710" role="img" aria-labelledby="title desc">
+  <title id="title">Relay system architecture</title>
+  <desc id="desc">A hand-drawn architecture diagram showing clients, API, PostgreSQL, control plane, NATS JetStream, workers, OpenAI, and MCP tools.</desc>
+  <defs>
+    <filter id="paper"><feTurbulence type="fractalNoise" baseFrequency=".012" numOctaves="3" seed="21" result="n"/><feBlend in="SourceGraphic" in2="n" mode="soft-light"/></filter>
+    <filter id="wiggle"><feTurbulence baseFrequency=".018" numOctaves="2" seed="7" result="noise"/><feDisplacementMap in="SourceGraphic" in2="noise" scale="2.2"/></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#a5b4fc"/></marker>
+    <style>
+      .bg{fill:#0b0b12}.box{fill:#171721;stroke:#c4b5fd;stroke-width:2.5}.data{fill:#13201d;stroke:#5eead4}.queue{fill:#111d2a;stroke:#67e8f9}.external{fill:#21172a;stroke:#f0abfc}.label{fill:#f4f4f5;font:600 21px ui-rounded,system-ui,sans-serif}.small{fill:#a1a1aa;font:15px ui-rounded,system-ui,sans-serif}.note{fill:#d4d4d8;font:16px ui-rounded,system-ui,sans-serif}.line{fill:none;stroke:#a5b4fc;stroke-width:2.5;marker-end:url(#arrow)}.dash{stroke-dasharray:8 7}.group{fill:none;stroke:#3f3f50;stroke-width:2;stroke-dasharray:10 8}.scribble{fill:none;stroke:#8b5cf6;stroke-width:2;opacity:.55}
+    </style>
+  </defs>
+  <rect class="bg" width="1260" height="710" rx="22"/>
+  <path class="scribble" d="M28 31 Q350 20 634 31 T1231 28 M31 680 Q340 692 630 681 T1228 682" filter="url(#wiggle)"/>
+  <text x="42" y="58" class="label" font-size="25">Relay — durable agent execution</text>
+  <text x="42" y="83" class="small">solid arrows: synchronous  ·  dashed arrows: asynchronous  ·  database remains authoritative</text>
+
+  <g filter="url(#wiggle)"><rect class="box" x="45" y="142" width="190" height="112" rx="16"/><rect class="box" x="45" y="420" width="190" height="112" rx="16"/></g>
+  <text x="140" y="187" class="label" text-anchor="middle">Next.js console</text><text x="140" y="218" class="small" text-anchor="middle">React Flow · SSE</text>
+  <text x="140" y="465" class="label" text-anchor="middle">API clients</text><text x="140" y="496" class="small" text-anchor="middle">OpenAPI · idempotency</text>
+
+  <g filter="url(#wiggle)"><rect class="box" x="315" y="170" width="205" height="138" rx="16"/></g>
+  <text x="417" y="214" class="label" text-anchor="middle">API</text><text x="417" y="244" class="small" text-anchor="middle">auth · validation · SSE</text><text x="417" y="270" class="small" text-anchor="middle">bounded requests</text>
+
+  <g filter="url(#wiggle)"><rect class="data" x="612" y="135" width="245" height="185" rx="18"/></g>
+  <text x="734" y="181" class="label" text-anchor="middle">PostgreSQL 17</text><text x="734" y="213" class="small" text-anchor="middle">workflows · runs · attempts</text><text x="734" y="239" class="small" text-anchor="middle">events · usage · outbox</text><path d="M675 274 q60 25 120 0" class="scribble"/><text x="734" y="300" class="note" text-anchor="middle">source of truth</text>
+
+  <g filter="url(#wiggle)"><rect class="box" x="575" y="405" width="310" height="145" rx="18"/></g>
+  <text x="730" y="447" class="label" text-anchor="middle">Control plane</text><text x="730" y="478" class="small" text-anchor="middle">scheduler · dispatcher · recovery</text><text x="730" y="504" class="small" text-anchor="middle">leases · retries · cancellation</text>
+
+  <g filter="url(#wiggle)"><rect class="queue" x="951" y="154" width="250" height="120" rx="18"/></g>
+  <text x="1076" y="199" class="label" text-anchor="middle">NATS JetStream</text><text x="1076" y="230" class="small" text-anchor="middle">dispatch, never authority</text>
+
+  <g filter="url(#wiggle)"><rect class="box" x="967" y="383" width="220" height="128" rx="18"/></g>
+  <text x="1077" y="427" class="label" text-anchor="middle">Worker pool</text><text x="1077" y="458" class="small" text-anchor="middle">fenced attempts</text><text x="1077" y="484" class="small" text-anchor="middle">horizontal scale</text>
+
+  <g filter="url(#wiggle)"><rect class="external" x="913" y="590" width="150" height="82" rx="15"/><rect class="external" x="1080" y="590" width="150" height="82" rx="15"/></g>
+  <text x="988" y="625" class="label" text-anchor="middle">OpenAI</text><text x="988" y="650" class="small" text-anchor="middle">Responses API</text>
+  <text x="1155" y="625" class="label" text-anchor="middle">MCP</text><text x="1155" y="650" class="small" text-anchor="middle">allowlisted tools</text>
+
+  <path class="line" d="M235 195 C270 195 279 212 315 224"/><path class="line" d="M235 474 C274 474 281 290 315 272"/><path class="line" d="M520 229 C555 229 571 222 612 222"/><path class="line" d="M672 320 C665 355 663 376 682 405"/><path class="line" d="M790 405 C805 371 795 348 770 320"/>
+  <path class="line dash" d="M885 456 C925 435 932 263 951 232"/><path class="line dash" d="M1077 274 L1077 383"/><path class="line" d="M967 451 C921 447 907 482 885 488"/><path class="line" d="M1044 511 C1032 544 1008 561 994 590"/><path class="line" d="M1115 511 C1132 548 1145 560 1150 590"/>
+
+  <g filter="url(#wiggle)"><rect class="group" x="285" y="110" width="630" height="475" rx="28"/></g><text x="305" y="135" class="small">trusted control boundary</text>
+  <text x="44" y="648" class="note">↳ duplicate delivery is expected</text><text x="44" y="675" class="note">↳ stale completions are rejected</text>
+</svg>
+

@@ -1,0 +1,23 @@
+.env
+.env.*
+!.env.example
+OPENAI_API_KEY.txt
+
+# Go
+bin/
+coverage/
+*.out
+
+# Node
+node_modules/
+.next/
+playwright-report/
+test-results/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+
