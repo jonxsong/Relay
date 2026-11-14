@@ -1,0 +1,102 @@
+package worker
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jonxsong/Relay/internal/store"
+)
+
+type AttemptRepository interface {
+	ClaimAttempt(context.Context, uuid.UUID, string, time.Duration) (store.AttemptClaim, error)
+	RenewLease(context.Context, store.AttemptClaim, time.Duration) error
+	CompleteAttemptSuccess(context.Context, store.AttemptClaim, json.RawMessage) error
+	CompleteAttemptFailure(context.Context, store.AttemptClaim, string, string, bool, int) error
+}
+
+type Worker struct {
+	repository  AttemptRepository
+	executor    Executor
+	workerID    string
+	lease       time.Duration
+	maxRetries  int
+	nodeTimeout time.Duration
+}
+
+func New(repository AttemptRepository, executor Executor, workerID string, lease time.Duration, maxRetries int) (*Worker, error) {
+	if repository == nil || executor == nil {
+		return nil, errors.New("worker repository and executor are required")
+	}
+	if workerID == "" {
+		return nil, errors.New("worker id is required")
+	}
+	if lease < 15*time.Second || lease > 10*time.Minute {
+		return nil, errors.New("worker lease must be between 15s and 10m")
+	}
+	if maxRetries < 0 || maxRetries > 100 {
+		return nil, errors.New("max retries must be between 0 and 100")
+	}
+	return &Worker{repository: repository, executor: executor, workerID: workerID, lease: lease, maxRetries: maxRetries, nodeTimeout: 2 * time.Minute}, nil
+}
+
+func (w *Worker) Handle(ctx context.Context, attemptID uuid.UUID) error {
+	claim, err := w.repository.ClaimAttempt(ctx, attemptID, w.workerID, w.lease)
+	if err != nil {
+		return err
+	}
+	executionContext, cancelExecution := context.WithTimeout(ctx, w.nodeTimeout)
+	defer cancelExecution()
+	leaseErrors := make(chan error, 1)
+	stopRenewal := make(chan struct{})
+	go w.renewLease(executionContext, claim, stopRenewal, leaseErrors, cancelExecution)
+
+	output, executionErr := w.executor.Execute(executionContext, claim.NodeType, claim.Input)
+	close(stopRenewal)
+	select {
+	case leaseErr := <-leaseErrors:
+		if leaseErr != nil {
+			return leaseErr
+		}
+	default:
+	}
+	if executionErr == nil {
+		return w.repository.CompleteAttemptSuccess(ctx, claim, output)
+	}
+	code := "execution_failed"
+	retryable := false
+	var typedError *ExecutionError
+	if errors.As(executionErr, &typedError) {
+		code = typedError.Code
+		retryable = typedError.Retryable
+	}
+	if err := w.repository.CompleteAttemptFailure(ctx, claim, code, executionErr.Error(), retryable, w.maxRetries); err != nil {
+		return fmt.Errorf("record node failure: %w", err)
+	}
+	return nil
+}
+
+func (w *Worker) renewLease(ctx context.Context, claim store.AttemptClaim, stop <-chan struct{}, failures chan<- error, cancel context.CancelFunc) {
+	ticker := time.NewTicker(w.lease / 3)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-stop:
+			return
+		case <-ticker.C:
+			if err := w.repository.RenewLease(ctx, claim, w.lease); err != nil {
+				select {
+				case failures <- err:
+				default:
+				}
+				cancel()
+				return
+			}
+		}
+	}
+}

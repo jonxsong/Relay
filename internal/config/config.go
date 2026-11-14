@@ -21,6 +21,9 @@ type Config struct {
 	GlobalConcurrency   int32
 	RunConcurrency      int32
 	ControlPollInterval time.Duration
+	WorkerLeaseDuration time.Duration
+	WorkerMaxRetries    int
+	Provider            string
 }
 
 func Load() (Config, error) {
@@ -44,6 +47,14 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	workerLeaseDuration, err := durationEnv("RELAY_WORKER_LEASE", 45*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+	workerMaxRetries, err := int64Env("RELAY_MAX_RETRIES", 3)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		Environment:         stringEnv("RELAY_ENV", "development"),
@@ -57,6 +68,9 @@ func Load() (Config, error) {
 		GlobalConcurrency:   int32(globalConcurrency),
 		RunConcurrency:      int32(runConcurrency),
 		ControlPollInterval: controlPollInterval,
+		WorkerLeaseDuration: workerLeaseDuration,
+		WorkerMaxRetries:    int(workerMaxRetries),
+		Provider:            stringEnv("RELAY_PROVIDER", "mock"),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")
@@ -75,6 +89,15 @@ func Load() (Config, error) {
 	}
 	if cfg.ControlPollInterval < 10*time.Millisecond || cfg.ControlPollInterval > 10*time.Second {
 		return Config{}, errors.New("RELAY_CONTROL_POLL_INTERVAL must be between 10ms and 10s")
+	}
+	if cfg.WorkerLeaseDuration < 15*time.Second || cfg.WorkerLeaseDuration > 10*time.Minute {
+		return Config{}, errors.New("RELAY_WORKER_LEASE must be between 15s and 10m")
+	}
+	if cfg.WorkerMaxRetries < 0 || cfg.WorkerMaxRetries > 100 {
+		return Config{}, errors.New("RELAY_MAX_RETRIES must be between 0 and 100")
+	}
+	if cfg.Provider != "mock" {
+		return Config{}, errors.New("only the deterministic mock provider is currently enabled")
 	}
 	if cfg.Environment != "development" {
 		return Config{}, errors.New("only development authentication is implemented; refusing to start a non-development environment")

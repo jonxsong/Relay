@@ -1,0 +1,70 @@
+package worker
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jonxsong/Relay/internal/store"
+)
+
+type fakeAttemptRepository struct {
+	claim       store.AttemptClaim
+	successes   int
+	failures    int
+	failureCode string
+	retryable   bool
+}
+
+func (f *fakeAttemptRepository) ClaimAttempt(context.Context, uuid.UUID, string, time.Duration) (store.AttemptClaim, error) {
+	return f.claim, nil
+}
+func (*fakeAttemptRepository) RenewLease(context.Context, store.AttemptClaim, time.Duration) error {
+	return nil
+}
+func (f *fakeAttemptRepository) CompleteAttemptSuccess(_ context.Context, _ store.AttemptClaim, output json.RawMessage) error {
+	if !json.Valid(output) {
+		return errors.New("invalid output")
+	}
+	f.successes++
+	return nil
+}
+func (f *fakeAttemptRepository) CompleteAttemptFailure(_ context.Context, _ store.AttemptClaim, code, _ string, retryable bool, _ int) error {
+	f.failures++
+	f.failureCode = code
+	f.retryable = retryable
+	return nil
+}
+
+func TestWorkerCompletesSuccessfulExecution(t *testing.T) {
+	t.Parallel()
+	repository := &fakeAttemptRepository{claim: store.AttemptClaim{NodeType: "llm", Input: json.RawMessage(`{"prompt":"hello"}`)}}
+	processor, err := New(repository, DeterministicMock{}, "worker-test", 15*time.Second, 3)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if err := processor.Handle(context.Background(), uuid.New()); err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if repository.successes != 1 || repository.failures != 0 {
+		t.Fatalf("successes=%d failures=%d", repository.successes, repository.failures)
+	}
+}
+
+func TestWorkerRecordsPermanentToolFailure(t *testing.T) {
+	t.Parallel()
+	repository := &fakeAttemptRepository{claim: store.AttemptClaim{NodeType: "tool", Input: json.RawMessage(`{}`)}}
+	processor, err := New(repository, DeterministicMock{}, "worker-test", 15*time.Second, 3)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if err := processor.Handle(context.Background(), uuid.New()); err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if repository.failures != 1 || repository.failureCode != "tool_not_configured" || repository.retryable {
+		t.Fatalf("failures=%d code=%q retryable=%v", repository.failures, repository.failureCode, repository.retryable)
+	}
+}

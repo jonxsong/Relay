@@ -10,7 +10,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-const taskStreamName = "RELAY_TASKS"
+const TaskStreamName = "RELAY_TASKS"
 
 type NATS struct {
 	connection *nats.Conn
@@ -35,7 +35,7 @@ func Open(ctx context.Context, url, clientName string) (*NATS, error) {
 		return nil, fmt.Errorf("create JetStream client: %w", err)
 	}
 	if _, err := stream.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name:        taskStreamName,
+		Name:        TaskStreamName,
 		Description: "Relay durable node task dispatch",
 		Subjects:    []string{"relay.tasks.>"},
 		Retention:   jetstream.WorkQueuePolicy,
@@ -48,6 +48,10 @@ func Open(ctx context.Context, url, clientName string) (*NATS, error) {
 		return nil, fmt.Errorf("ensure task stream: %w", err)
 	}
 	return &NATS{connection: connection, jetstream: stream}, nil
+}
+
+func (n *NATS) JetStream() jetstream.JetStream {
+	return n.jetstream
 }
 
 func (n *NATS) Publish(ctx context.Context, event db.OutboxEvent) error {

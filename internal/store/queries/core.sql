@@ -317,8 +317,18 @@ SET status = 'running',
     lease_expires_at = sqlc.arg(lease_expires_at),
     last_heartbeat_at = now(),
     started_at = COALESCE(started_at, now())
-WHERE id = sqlc.arg(id)
-  AND status = 'queued'
+WHERE node_attempts.id = sqlc.arg(id)
+  AND node_attempts.status = 'queued'
+  AND EXISTS (
+      SELECT 1
+      FROM node_runs nr
+      JOIN workflow_runs wr ON wr.id = nr.run_id
+      WHERE nr.id = node_attempts.node_run_id
+        AND nr.status = 'queued'
+        AND wr.status IN ('pending', 'running')
+        AND wr.cancel_requested_at IS NULL
+        AND (wr.deadline_at IS NULL OR wr.deadline_at > now())
+  )
 RETURNING *;
 
 -- name: MarkNodeRunning :execrows
@@ -329,12 +339,23 @@ SET status = 'running',
 WHERE id = sqlc.arg(id)
   AND status = 'queued';
 
+-- name: GetNodeRunByID :one
+SELECT *
+FROM node_runs
+WHERE id = sqlc.arg(id);
+
+-- name: GetWorkflowDefinitionForRun :one
+SELECT wv.definition
+FROM workflow_runs wr
+JOIN workflow_versions wv ON wv.id = wr.workflow_version_id
+WHERE wr.id = sqlc.arg(run_id);
+
 -- name: RenewAttemptLease :one
 UPDATE node_attempts
 SET lease_expires_at = sqlc.arg(lease_expires_at),
     last_heartbeat_at = now()
-WHERE id = sqlc.arg(id)
-  AND status = 'running'
+WHERE node_attempts.id = sqlc.arg(id)
+  AND node_attempts.status = 'running'
   AND fencing_token = sqlc.arg(fencing_token)
   AND worker_id = sqlc.arg(worker_id)
   AND lease_expires_at > now()
@@ -354,6 +375,90 @@ WHERE id = sqlc.arg(id)
   AND fencing_token = sqlc.arg(fencing_token)
   AND worker_id = sqlc.arg(worker_id)
 RETURNING *;
+
+-- name: CompleteNodeRunSuccess :execrows
+UPDATE node_runs
+SET status = 'succeeded',
+    output = sqlc.arg(output),
+    error_code = NULL,
+    error_message = NULL,
+    completed_at = now(),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND status = 'running';
+
+-- name: CompleteNodeRunFailure :execrows
+UPDATE node_runs
+SET status = 'failed',
+    error_code = sqlc.arg(error_code),
+    error_message = left(sqlc.arg(error_message), 4000),
+    completed_at = now(),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND status = 'running';
+
+-- name: CancelRunningNode :execrows
+UPDATE node_runs
+SET status = 'cancelled',
+    error_code = 'run_cancelled',
+    error_message = 'run was cancelled while the node was executing',
+    completed_at = now(),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND status = 'running';
+
+-- name: MarkDependencySucceeded :execrows
+UPDATE node_runs
+SET succeeded_dependency_count = succeeded_dependency_count + 1,
+    status = CASE
+        WHEN succeeded_dependency_count + 1 = dependency_count THEN 'ready'
+        ELSE status
+    END,
+    updated_at = now()
+WHERE run_id = sqlc.arg(run_id)
+  AND node_key = sqlc.arg(node_key)
+  AND status = 'pending'
+  AND succeeded_dependency_count < dependency_count;
+
+-- name: CountNonTerminalNodes :one
+SELECT count(*)::integer
+FROM node_runs
+WHERE run_id = sqlc.arg(run_id)
+  AND status NOT IN ('succeeded', 'failed', 'cancelled', 'skipped');
+
+-- name: CompleteRunSuccess :execrows
+UPDATE workflow_runs
+SET status = 'succeeded',
+    output = sqlc.arg(output),
+    completed_at = now(),
+    updated_at = now()
+WHERE workflow_runs.id = sqlc.arg(id)
+  AND workflow_runs.status = 'running'
+  AND NOT EXISTS (
+      SELECT 1 FROM node_runs
+      WHERE run_id = workflow_runs.id
+        AND status <> 'succeeded'
+  );
+
+-- name: CompleteRunFailure :execrows
+UPDATE workflow_runs
+SET status = 'failed',
+    error_code = sqlc.arg(error_code),
+    error_message = left(sqlc.arg(error_message), 4000),
+    completed_at = now(),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND status IN ('pending', 'running');
+
+-- name: SkipUnstartedNodes :execrows
+UPDATE node_runs
+SET status = 'skipped',
+    error_code = 'upstream_failed',
+    error_message = 'not executed because a required node failed',
+    completed_at = now(),
+    updated_at = now()
+WHERE run_id = sqlc.arg(run_id)
+  AND status IN ('pending', 'ready', 'queued');
 
 -- name: LockExpiredAttempts :many
 SELECT *

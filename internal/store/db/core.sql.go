@@ -98,6 +98,25 @@ func (q *Queries) CancelInactiveNodes(ctx context.Context, runID uuid.UUID) (int
 	return result.RowsAffected(), nil
 }
 
+const cancelRunningNode = `-- name: CancelRunningNode :execrows
+UPDATE node_runs
+SET status = 'cancelled',
+    error_code = 'run_cancelled',
+    error_message = 'run was cancelled while the node was executing',
+    completed_at = now(),
+    updated_at = now()
+WHERE id = $1
+  AND status = 'running'
+`
+
+func (q *Queries) CancelRunningNode(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelRunningNode, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimNodeAttempt = `-- name: ClaimNodeAttempt :one
 UPDATE node_attempts
 SET status = 'running',
@@ -106,8 +125,18 @@ SET status = 'running',
     lease_expires_at = $2,
     last_heartbeat_at = now(),
     started_at = COALESCE(started_at, now())
-WHERE id = $3
-  AND status = 'queued'
+WHERE node_attempts.id = $3
+  AND node_attempts.status = 'queued'
+  AND EXISTS (
+      SELECT 1
+      FROM node_runs nr
+      JOIN workflow_runs wr ON wr.id = nr.run_id
+      WHERE nr.id = node_attempts.node_run_id
+        AND nr.status = 'queued'
+        AND wr.status IN ('pending', 'running')
+        AND wr.cancel_requested_at IS NULL
+        AND (wr.deadline_at IS NULL OR wr.deadline_at > now())
+  )
 RETURNING id, node_run_id, attempt_no, status, worker_id, fencing_token, lease_expires_at, last_heartbeat_at, input, output, error_code, error_message, retryable, queued_at, started_at, completed_at
 `
 
@@ -231,6 +260,109 @@ func (q *Queries) CompleteNodeAttempt(ctx context.Context, arg CompleteNodeAttem
 	return i, err
 }
 
+const completeNodeRunFailure = `-- name: CompleteNodeRunFailure :execrows
+UPDATE node_runs
+SET status = 'failed',
+    error_code = $1,
+    error_message = left($2, 4000),
+    completed_at = now(),
+    updated_at = now()
+WHERE id = $3
+  AND status = 'running'
+`
+
+type CompleteNodeRunFailureParams struct {
+	ErrorCode    *string   `json:"error_code"`
+	ErrorMessage string    `json:"error_message"`
+	ID           uuid.UUID `json:"id"`
+}
+
+func (q *Queries) CompleteNodeRunFailure(ctx context.Context, arg CompleteNodeRunFailureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeNodeRunFailure, arg.ErrorCode, arg.ErrorMessage, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const completeNodeRunSuccess = `-- name: CompleteNodeRunSuccess :execrows
+UPDATE node_runs
+SET status = 'succeeded',
+    output = $1,
+    error_code = NULL,
+    error_message = NULL,
+    completed_at = now(),
+    updated_at = now()
+WHERE id = $2
+  AND status = 'running'
+`
+
+type CompleteNodeRunSuccessParams struct {
+	Output []byte    `json:"output"`
+	ID     uuid.UUID `json:"id"`
+}
+
+func (q *Queries) CompleteNodeRunSuccess(ctx context.Context, arg CompleteNodeRunSuccessParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeNodeRunSuccess, arg.Output, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const completeRunFailure = `-- name: CompleteRunFailure :execrows
+UPDATE workflow_runs
+SET status = 'failed',
+    error_code = $1,
+    error_message = left($2, 4000),
+    completed_at = now(),
+    updated_at = now()
+WHERE id = $3
+  AND status IN ('pending', 'running')
+`
+
+type CompleteRunFailureParams struct {
+	ErrorCode    *string   `json:"error_code"`
+	ErrorMessage string    `json:"error_message"`
+	ID           uuid.UUID `json:"id"`
+}
+
+func (q *Queries) CompleteRunFailure(ctx context.Context, arg CompleteRunFailureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeRunFailure, arg.ErrorCode, arg.ErrorMessage, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const completeRunSuccess = `-- name: CompleteRunSuccess :execrows
+UPDATE workflow_runs
+SET status = 'succeeded',
+    output = $1,
+    completed_at = now(),
+    updated_at = now()
+WHERE workflow_runs.id = $2
+  AND workflow_runs.status = 'running'
+  AND NOT EXISTS (
+      SELECT 1 FROM node_runs
+      WHERE run_id = workflow_runs.id
+        AND status <> 'succeeded'
+  )
+`
+
+type CompleteRunSuccessParams struct {
+	Output []byte    `json:"output"`
+	ID     uuid.UUID `json:"id"`
+}
+
+func (q *Queries) CompleteRunSuccess(ctx context.Context, arg CompleteRunSuccessParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeRunSuccess, arg.Output, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countActiveNodes = `-- name: CountActiveNodes :one
 SELECT count(*)::integer
 FROM node_runs
@@ -239,6 +371,20 @@ WHERE status IN ('queued', 'running')
 
 func (q *Queries) CountActiveNodes(ctx context.Context) (int32, error) {
 	row := q.db.QueryRow(ctx, countActiveNodes)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countNonTerminalNodes = `-- name: CountNonTerminalNodes :one
+SELECT count(*)::integer
+FROM node_runs
+WHERE run_id = $1
+  AND status NOT IN ('succeeded', 'failed', 'cancelled', 'skipped')
+`
+
+func (q *Queries) CountNonTerminalNodes(ctx context.Context, runID uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countNonTerminalNodes, runID)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -539,6 +685,36 @@ func (q *Queries) GetLatestWorkflowVersion(ctx context.Context, arg GetLatestWor
 	return i, err
 }
 
+const getNodeRunByID = `-- name: GetNodeRunByID :one
+SELECT id, run_id, node_key, node_type, status, dependency_count, succeeded_dependency_count, current_attempt_no, next_attempt_at, output, error_code, error_message, started_at, completed_at, created_at, updated_at
+FROM node_runs
+WHERE id = $1
+`
+
+func (q *Queries) GetNodeRunByID(ctx context.Context, id uuid.UUID) (NodeRun, error) {
+	row := q.db.QueryRow(ctx, getNodeRunByID, id)
+	var i NodeRun
+	err := row.Scan(
+		&i.ID,
+		&i.RunID,
+		&i.NodeKey,
+		&i.NodeType,
+		&i.Status,
+		&i.DependencyCount,
+		&i.SucceededDependencyCount,
+		&i.CurrentAttemptNo,
+		&i.NextAttemptAt,
+		&i.Output,
+		&i.ErrorCode,
+		&i.ErrorMessage,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getRun = `-- name: GetRun :one
 SELECT id, workflow_version_id, owner_id, status, input, output, error_code, error_message, cost_budget_microusd, deadline_at, cancel_requested_at, started_at, completed_at, created_at, updated_at, next_event_sequence
 FROM workflow_runs
@@ -631,6 +807,20 @@ func (q *Queries) GetWorkflow(ctx context.Context, arg GetWorkflowParams) (Workf
 		&i.DeletedAt,
 	)
 	return i, err
+}
+
+const getWorkflowDefinitionForRun = `-- name: GetWorkflowDefinitionForRun :one
+SELECT wv.definition
+FROM workflow_runs wr
+JOIN workflow_versions wv ON wv.id = wr.workflow_version_id
+WHERE wr.id = $1
+`
+
+func (q *Queries) GetWorkflowDefinitionForRun(ctx context.Context, runID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getWorkflowDefinitionForRun, runID)
+	var definition []byte
+	err := row.Scan(&definition)
+	return definition, err
 }
 
 const getWorkflowVersion = `-- name: GetWorkflowVersion :one
@@ -1128,6 +1318,33 @@ func (q *Queries) LockWorkflowForVersion(ctx context.Context, arg LockWorkflowFo
 	return i, err
 }
 
+const markDependencySucceeded = `-- name: MarkDependencySucceeded :execrows
+UPDATE node_runs
+SET succeeded_dependency_count = succeeded_dependency_count + 1,
+    status = CASE
+        WHEN succeeded_dependency_count + 1 = dependency_count THEN 'ready'
+        ELSE status
+    END,
+    updated_at = now()
+WHERE run_id = $1
+  AND node_key = $2
+  AND status = 'pending'
+  AND succeeded_dependency_count < dependency_count
+`
+
+type MarkDependencySucceededParams struct {
+	RunID   uuid.UUID `json:"run_id"`
+	NodeKey string    `json:"node_key"`
+}
+
+func (q *Queries) MarkDependencySucceeded(ctx context.Context, arg MarkDependencySucceededParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markDependencySucceeded, arg.RunID, arg.NodeKey)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const markNodeRunning = `-- name: MarkNodeRunning :execrows
 UPDATE node_runs
 SET status = 'running',
@@ -1266,8 +1483,8 @@ const renewAttemptLease = `-- name: RenewAttemptLease :one
 UPDATE node_attempts
 SET lease_expires_at = $1,
     last_heartbeat_at = now()
-WHERE id = $2
-  AND status = 'running'
+WHERE node_attempts.id = $2
+  AND node_attempts.status = 'running'
   AND fencing_token = $3
   AND worker_id = $4
   AND lease_expires_at > now()
@@ -1396,6 +1613,25 @@ type ScheduleNodeRetryParams struct {
 
 func (q *Queries) ScheduleNodeRetry(ctx context.Context, arg ScheduleNodeRetryParams) (int64, error) {
 	result, err := q.db.Exec(ctx, scheduleNodeRetry, arg.NextAttemptAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const skipUnstartedNodes = `-- name: SkipUnstartedNodes :execrows
+UPDATE node_runs
+SET status = 'skipped',
+    error_code = 'upstream_failed',
+    error_message = 'not executed because a required node failed',
+    completed_at = now(),
+    updated_at = now()
+WHERE run_id = $1
+  AND status IN ('pending', 'ready', 'queued')
+`
+
+func (q *Queries) SkipUnstartedNodes(ctx context.Context, runID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, skipUnstartedNodes, runID)
 	if err != nil {
 		return 0, err
 	}
