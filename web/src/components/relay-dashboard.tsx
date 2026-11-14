@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import {
   Background, Controls, Handle, MiniMap, Position, ReactFlow,
-  type Node, type NodeProps, type NodeTypes,
+  type Edge, type Node, type NodeProps, type NodeTypes,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -133,10 +133,44 @@ export function RelayDashboard() {
   const retries = nodes.reduce((total, node) => total + Math.max(0, node.current_attempt_no - 1), 0);
   const tokenTotal = (usage?.totals.input_tokens ?? 0) + (usage?.totals.output_tokens ?? 0);
   const knownCost = usage?.totals.cost_microusd;
-  const flowNodes = useMemo<ExecutionNode[]>(() => nodes.map((node, index) => ({
-    id: node.id, type: "execution", data: { node },
-    position: { x: 64 + (index % 4) * 248, y: 72 + Math.floor(index / 4) * 132 },
+  const flowNodes = useMemo<ExecutionNode[]>(() => nodes.map((node) => ({
+    id: node.id,
+    type: "execution",
+    data: { node },
+    position: (() => {
+      const byKey = new Map(nodes.map((candidate) => [candidate.node_key, candidate]));
+      const memo = new Map<string, number>();
+      const depth = (candidate: NodeRun, visiting = new Set<string>()): number => {
+        const cached = memo.get(candidate.node_key);
+        if (cached !== undefined) return cached;
+        if (visiting.has(candidate.node_key)) return 0;
+        visiting.add(candidate.node_key);
+        const value = candidate.depends_on.length === 0 ? 0 : 1 + Math.max(...candidate.depends_on.map((key) => {
+          const dependency = byKey.get(key);
+          return dependency ? depth(dependency, visiting) : 0;
+        }));
+        visiting.delete(candidate.node_key);
+        memo.set(candidate.node_key, value);
+        return value;
+      };
+      const column = depth(node);
+      const row = nodes.filter((candidate) => depth(candidate) === column).findIndex((candidate) => candidate.id === node.id);
+      return { x: 64 + column * 260, y: 72 + Math.max(0, row) * 116 };
+    })(),
   })), [nodes]);
+  const flowEdges = useMemo<Edge[]>(() => {
+    const byKey = new Map(nodes.map((node) => [node.node_key, node.id]));
+    return nodes.flatMap((node) => node.depends_on.flatMap((dependency) => {
+      const source = byKey.get(dependency);
+      return source ? [{
+        id: `${source}-${node.id}`,
+        source,
+        target: node.id,
+        animated: node.status === "running",
+        style: { stroke: node.status === "succeeded" ? "#4ade80" : "#655bd4", strokeWidth: 1.6 },
+      }] : [];
+    }));
+  }, [nodes]);
 
   return (
     <div className="app-shell">
@@ -167,7 +201,7 @@ export function RelayDashboard() {
         <section className="graph-section">
           <div className="section-bar"><div><span className="section-index">01</span><div><h2>Live execution graph</h2><p>{selectedRun ? `Run ${selectedRun.id.slice(0, 8)} · ${selectedRun.status}` : "Select a run to inspect its durable node state"}</p></div></div><div className="section-actions"><button><ListFilter size={15} />All nodes</button><button><GitBranch size={15} />Auto layout</button></div></div>
           <div className="graph-card">
-            {flowNodes.length > 0 ? <ReactFlow nodes={flowNodes} edges={[]} nodeTypes={nodeTypes} fitView minZoom={0.45} maxZoom={1.8} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }}><Background color="#34354b" gap={24} size={1} /><Controls showInteractive={false} /><MiniMap nodeColor={(node) => statusColor[(node.data as ExecutionNodeData).node.status] ?? statusColor.pending} maskColor="rgba(8,9,15,.72)" /></ReactFlow> : <div className="graph-empty"><div><WorkflowIcon size={28} /></div><h3>{connection === "live" ? "No execution nodes yet" : "Connect the Relay backend"}</h3><p>{connection === "live" ? "Create a workflow and submit a run. Its durable node states will appear here in real time." : "Start the API, control plane, worker, PostgreSQL, and NATS stack to populate this console with real execution data."}</p><button className="primary-action"><WorkflowIcon size={15} />Create workflow</button></div>}
+            {flowNodes.length > 0 ? <ReactFlow nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes} fitView minZoom={0.45} maxZoom={1.8} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }}><Background color="#34354b" gap={24} size={1} /><Controls showInteractive={false} /><MiniMap nodeColor={(node) => statusColor[(node.data as ExecutionNodeData).node.status] ?? statusColor.pending} maskColor="rgba(8,9,15,.72)" /></ReactFlow> : <div className="graph-empty"><div><WorkflowIcon size={28} /></div><h3>{connection === "live" ? "No execution nodes yet" : "Connect the Relay backend"}</h3><p>{connection === "live" ? "Create a workflow and submit a run. Its durable node states will appear here in real time." : "Start the API, control plane, worker, PostgreSQL, and NATS stack to populate this console with real execution data."}</p><button className="primary-action"><WorkflowIcon size={15} />Create workflow</button></div>}
             <div className="graph-legend">{["running", "succeeded", "failed", "queued"].map((status) => <span key={status}><i style={{ background: statusColor[status] }} />{status}</span>)}</div>
           </div>
         </section>

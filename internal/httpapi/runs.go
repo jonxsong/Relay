@@ -26,6 +26,7 @@ type RunRepository interface {
 	ReplayEvents(context.Context, uuid.UUID, uuid.UUID, int64, int32) ([]db.ExecutionEvent, error)
 	ListRunUsage(context.Context, uuid.UUID, uuid.UUID) ([]db.UsageRecord, error)
 	CancelRun(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowRun, error)
+	GetRunDefinition(context.Context, uuid.UUID, uuid.UUID) (domain.WorkflowDefinition, error)
 }
 
 type submitRunRequest struct {
@@ -56,6 +57,7 @@ type nodeRunResponse struct {
 	Output           json.RawMessage `json:"output,omitempty"`
 	ErrorCode        *string         `json:"error_code,omitempty"`
 	ErrorMessage     *string         `json:"error_message,omitempty"`
+	DependsOn        []string        `json:"depends_on"`
 }
 
 type eventResponse struct {
@@ -332,9 +334,23 @@ func listRunNodesHandler(repository RunRepository) http.HandlerFunc {
 			writeRunRepositoryError(w, r, err)
 			return
 		}
+		definition, err := repository.GetRunDefinition(r.Context(), ownerID, runID)
+		if err != nil {
+			writeRunRepositoryError(w, r, err)
+			return
+		}
+		dependencies := make(map[string][]string, len(definition.Nodes))
+		for _, node := range definition.Nodes {
+			dependencies[node.ID] = node.DependsOn
+		}
 		items := make([]nodeRunResponse, 0, len(nodes))
 		for _, node := range nodes {
-			items = append(items, nodeFromDB(node))
+			response := nodeFromDB(node)
+			response.DependsOn = dependencies[node.NodeKey]
+			if response.DependsOn == nil {
+				response.DependsOn = []string{}
+			}
+			items = append(items, response)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"items": items})
 	}

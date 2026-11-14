@@ -149,6 +149,29 @@ func (s *Store) GetWorkflow(ctx context.Context, ownerID, workflowID uuid.UUID) 
 	return workflow, nil
 }
 
+func (s *Store) GetLatestWorkflowVersion(ctx context.Context, ownerID, workflowID uuid.UUID) (db.WorkflowVersion, error) {
+	version, err := s.queries.GetLatestWorkflowVersion(ctx, db.GetLatestWorkflowVersionParams{WorkflowID: workflowID, OwnerID: ownerID})
+	if err != nil {
+		return db.WorkflowVersion{}, classifyReadError("get latest workflow version", err)
+	}
+	return version, nil
+}
+
+func (s *Store) GetRunDefinition(ctx context.Context, ownerID, runID uuid.UUID) (domain.WorkflowDefinition, error) {
+	if _, err := s.GetRun(ctx, ownerID, runID); err != nil {
+		return domain.WorkflowDefinition{}, err
+	}
+	payload, err := s.queries.GetWorkflowDefinitionForRun(ctx, runID)
+	if err != nil {
+		return domain.WorkflowDefinition{}, classifyReadError("get run workflow definition", err)
+	}
+	var definition domain.WorkflowDefinition
+	if err := json.Unmarshal(payload, &definition); err != nil {
+		return domain.WorkflowDefinition{}, fmt.Errorf("decode run workflow definition: %w", err)
+	}
+	return definition, nil
+}
+
 func (s *Store) ListWorkflows(ctx context.Context, ownerID uuid.UUID, pageSize int32) ([]db.Workflow, error) {
 	workflows, err := s.queries.ListWorkflows(ctx, db.ListWorkflowsParams{OwnerID: ownerID, PageSize: pageSize})
 	if err != nil {

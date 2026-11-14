@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jonxsong/Relay/internal/domain"
 	"github.com/jonxsong/Relay/internal/store"
 	"github.com/jonxsong/Relay/internal/store/db"
 )
@@ -45,6 +46,9 @@ func (fakeRuns) ListRunUsage(context.Context, uuid.UUID, uuid.UUID) ([]db.UsageR
 }
 func (fakeRuns) CancelRun(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowRun, error) {
 	return db.WorkflowRun{}, store.ErrNotFound
+}
+func (fakeRuns) GetRunDefinition(context.Context, uuid.UUID, uuid.UUID) (domain.WorkflowDefinition, error) {
+	return domain.WorkflowDefinition{}, store.ErrNotFound
 }
 
 func TestSubmitRunRequiresIdempotencyKey(t *testing.T) {

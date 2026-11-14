@@ -24,6 +24,7 @@ type WorkflowRepository interface {
 	CreateWorkflow(context.Context, uuid.UUID, string, string, domain.WorkflowDefinition) (store.CreatedWorkflow, error)
 	CreateWorkflowVersion(context.Context, uuid.UUID, uuid.UUID, domain.WorkflowDefinition) (db.WorkflowVersion, error)
 	GetWorkflow(context.Context, uuid.UUID, uuid.UUID) (db.Workflow, error)
+	GetLatestWorkflowVersion(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowVersion, error)
 	ListWorkflows(context.Context, uuid.UUID, int32) ([]db.Workflow, error)
 }
 
@@ -47,10 +48,11 @@ type workflowResponse struct {
 }
 
 type versionResponse struct {
-	ID         uuid.UUID `json:"id"`
-	WorkflowID uuid.UUID `json:"workflow_id"`
-	Version    int32     `json:"version"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         uuid.UUID       `json:"id"`
+	WorkflowID uuid.UUID       `json:"workflow_id"`
+	Version    int32           `json:"version"`
+	CreatedAt  time.Time       `json:"created_at"`
+	Definition json.RawMessage `json:"definition,omitempty"`
 }
 
 func mountWorkflowRoutes(router chi.Router, repository WorkflowRepository) {
@@ -131,7 +133,15 @@ func getWorkflowHandler(repository WorkflowRepository) http.HandlerFunc {
 			writeRepositoryError(w, r, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, workflowFromDB(workflow))
+		version, err := repository.GetLatestWorkflowVersion(r.Context(), ownerID, workflowID)
+		if err != nil {
+			writeRepositoryError(w, r, err)
+			return
+		}
+		response := workflowFromDB(workflow)
+		latest := versionFromDB(version)
+		response.Version = &latest
+		writeJSON(w, http.StatusOK, response)
 	}
 }
 
@@ -215,7 +225,7 @@ func workflowFromDB(workflow db.Workflow) workflowResponse {
 
 func versionFromDB(version db.WorkflowVersion) versionResponse {
 	return versionResponse{
-		ID: version.ID, WorkflowID: version.WorkflowID, Version: version.Version, CreatedAt: timeFromTimestamptz(version.CreatedAt),
+		ID: version.ID, WorkflowID: version.WorkflowID, Version: version.Version, CreatedAt: timeFromTimestamptz(version.CreatedAt), Definition: version.Definition,
 	}
 }
 

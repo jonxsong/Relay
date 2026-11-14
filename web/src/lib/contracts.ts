@@ -6,6 +6,21 @@ export const workflowSchema = z.object({
   description: z.string(),
   created_at: z.iso.datetime(),
   updated_at: z.iso.datetime(),
+  version: z.object({
+    id: z.uuid(),
+    workflow_id: z.uuid(),
+    version: z.number().int(),
+    created_at: z.iso.datetime(),
+    definition: z.object({
+      name: z.string(),
+      nodes: z.array(z.object({
+        id: z.string(),
+        type: z.enum(["llm", "tool", "transform", "join"]),
+        depends_on: z.array(z.string()).optional(),
+        inputs: z.record(z.string(), z.unknown()).optional(),
+      })),
+    }).optional(),
+  }).optional(),
 });
 
 export const runSchema = z.object({
@@ -30,6 +45,7 @@ export const nodeRunSchema = z.object({
   output: z.unknown().optional(),
   error_code: z.string().nullable().optional(),
   error_message: z.string().nullable().optional(),
+  depends_on: z.array(z.string()),
 });
 
 export const eventSchema = z.object({

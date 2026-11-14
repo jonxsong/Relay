@@ -34,6 +34,9 @@ func (fakeWorkflows) CreateWorkflowVersion(context.Context, uuid.UUID, uuid.UUID
 func (fakeWorkflows) GetWorkflow(context.Context, uuid.UUID, uuid.UUID) (db.Workflow, error) {
 	return db.Workflow{}, store.ErrNotFound
 }
+func (fakeWorkflows) GetLatestWorkflowVersion(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowVersion, error) {
+	return db.WorkflowVersion{}, store.ErrNotFound
+}
 func (fakeWorkflows) ListWorkflows(context.Context, uuid.UUID, int32) ([]db.Workflow, error) {
 	return []db.Workflow{}, nil
 }
