@@ -12,6 +12,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireSchedulerLock = `-- name: AcquireSchedulerLock :exec
+SELECT pg_advisory_xact_lock(824173921)
+`
+
+func (q *Queries) AcquireSchedulerLock(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, acquireSchedulerLock)
+	return err
+}
+
 const allocateEventSequence = `-- name: AllocateEventSequence :one
 UPDATE workflow_runs
 SET next_event_sequence = next_event_sequence + 1,
@@ -220,6 +229,19 @@ func (q *Queries) CompleteNodeAttempt(ctx context.Context, arg CompleteNodeAttem
 		&i.CompletedAt,
 	)
 	return i, err
+}
+
+const countActiveNodes = `-- name: CountActiveNodes :one
+SELECT count(*)::integer
+FROM node_runs
+WHERE status IN ('queued', 'running')
+`
+
+func (q *Queries) CountActiveNodes(ctx context.Context) (int32, error) {
+	row := q.db.QueryRow(ctx, countActiveNodes)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const createNodeRun = `-- name: CreateNodeRun :one
@@ -640,6 +662,38 @@ func (q *Queries) GetWorkflowVersion(ctx context.Context, arg GetWorkflowVersion
 	return i, err
 }
 
+const listNodeOutputsForRun = `-- name: ListNodeOutputsForRun :many
+SELECT node_key, output
+FROM node_runs
+WHERE run_id = $1
+  AND status = 'succeeded'
+`
+
+type ListNodeOutputsForRunRow struct {
+	NodeKey string `json:"node_key"`
+	Output  []byte `json:"output"`
+}
+
+func (q *Queries) ListNodeOutputsForRun(ctx context.Context, runID uuid.UUID) ([]ListNodeOutputsForRunRow, error) {
+	rows, err := q.db.Query(ctx, listNodeOutputsForRun, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListNodeOutputsForRunRow{}
+	for rows.Next() {
+		var i ListNodeOutputsForRunRow
+		if err := rows.Scan(&i.NodeKey, &i.Output); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRunNodes = `-- name: ListRunNodes :many
 SELECT nr.id, nr.run_id, nr.node_key, nr.node_type, nr.status, nr.dependency_count, nr.succeeded_dependency_count, nr.current_attempt_no, nr.next_attempt_at, nr.output, nr.error_code, nr.error_message, nr.started_at, nr.completed_at, nr.created_at, nr.updated_at
 FROM node_runs nr
@@ -929,6 +983,80 @@ func (q *Queries) LockIdempotencyKey(ctx context.Context, arg LockIdempotencyKey
 	return i, err
 }
 
+const lockOneReadyNode = `-- name: LockOneReadyNode :one
+SELECT
+    nr.id, nr.run_id, nr.node_key, nr.node_type, nr.status, nr.dependency_count, nr.succeeded_dependency_count, nr.current_attempt_no, nr.next_attempt_at, nr.output, nr.error_code, nr.error_message, nr.started_at, nr.completed_at, nr.created_at, nr.updated_at,
+    wr.input AS run_input,
+    wr.status AS run_status,
+    wv.definition AS workflow_definition
+FROM node_runs nr
+JOIN workflow_runs wr ON wr.id = nr.run_id
+JOIN workflow_versions wv ON wv.id = wr.workflow_version_id
+WHERE nr.status = 'ready'
+  AND (nr.next_attempt_at IS NULL OR nr.next_attempt_at <= now())
+  AND wr.status IN ('pending', 'running')
+  AND wr.cancel_requested_at IS NULL
+  AND (wr.deadline_at IS NULL OR wr.deadline_at > now())
+  AND (
+      SELECT count(*)
+      FROM node_runs active
+      WHERE active.run_id = nr.run_id
+        AND active.status IN ('queued', 'running')
+  ) < $1::integer
+ORDER BY wr.created_at, nr.created_at, nr.id
+LIMIT 1
+FOR UPDATE OF nr SKIP LOCKED
+`
+
+type LockOneReadyNodeRow struct {
+	ID                       uuid.UUID          `json:"id"`
+	RunID                    uuid.UUID          `json:"run_id"`
+	NodeKey                  string             `json:"node_key"`
+	NodeType                 string             `json:"node_type"`
+	Status                   string             `json:"status"`
+	DependencyCount          int32              `json:"dependency_count"`
+	SucceededDependencyCount int32              `json:"succeeded_dependency_count"`
+	CurrentAttemptNo         int32              `json:"current_attempt_no"`
+	NextAttemptAt            pgtype.Timestamptz `json:"next_attempt_at"`
+	Output                   []byte             `json:"output"`
+	ErrorCode                *string            `json:"error_code"`
+	ErrorMessage             *string            `json:"error_message"`
+	StartedAt                pgtype.Timestamptz `json:"started_at"`
+	CompletedAt              pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	RunInput                 []byte             `json:"run_input"`
+	RunStatus                string             `json:"run_status"`
+	WorkflowDefinition       []byte             `json:"workflow_definition"`
+}
+
+func (q *Queries) LockOneReadyNode(ctx context.Context, runConcurrency int32) (LockOneReadyNodeRow, error) {
+	row := q.db.QueryRow(ctx, lockOneReadyNode, runConcurrency)
+	var i LockOneReadyNodeRow
+	err := row.Scan(
+		&i.ID,
+		&i.RunID,
+		&i.NodeKey,
+		&i.NodeType,
+		&i.Status,
+		&i.DependencyCount,
+		&i.SucceededDependencyCount,
+		&i.CurrentAttemptNo,
+		&i.NextAttemptAt,
+		&i.Output,
+		&i.ErrorCode,
+		&i.ErrorMessage,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RunInput,
+		&i.RunStatus,
+		&i.WorkflowDefinition,
+	)
+	return i, err
+}
+
 const lockPendingOutboxEvents = `-- name: LockPendingOutboxEvents :many
 SELECT id, aggregate_type, aggregate_id, topic, deduplication_id, payload, available_at, publish_attempts, last_error, published_at, created_at
 FROM outbox_events
@@ -1028,6 +1156,23 @@ WHERE id = $1
 
 func (q *Queries) MarkOutboxPublished(ctx context.Context, id uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, markOutboxPublished, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markRunRunning = `-- name: MarkRunRunning :execrows
+UPDATE workflow_runs
+SET status = 'running',
+    started_at = COALESCE(started_at, now()),
+    updated_at = now()
+WHERE id = $1
+  AND status = 'pending'
+`
+
+func (q *Queries) MarkRunRunning(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markRunRunning, id)
 	if err != nil {
 		return 0, err
 	}

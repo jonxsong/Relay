@@ -10,13 +10,17 @@ import (
 )
 
 type Config struct {
-	Environment     string
-	HTTPAddr        string
-	DatabaseURL     string
-	LogLevel        string
-	DevUserEmail    string
-	MaxRequestBytes int64
-	ShutdownTimeout time.Duration
+	Environment         string
+	HTTPAddr            string
+	DatabaseURL         string
+	NATSURL             string
+	LogLevel            string
+	DevUserEmail        string
+	MaxRequestBytes     int64
+	ShutdownTimeout     time.Duration
+	GlobalConcurrency   int32
+	RunConcurrency      int32
+	ControlPollInterval time.Duration
 }
 
 func Load() (Config, error) {
@@ -28,15 +32,31 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	globalConcurrency, err := int64Env("RELAY_GLOBAL_CONCURRENCY", 100)
+	if err != nil {
+		return Config{}, err
+	}
+	runConcurrency, err := int64Env("RELAY_RUN_CONCURRENCY", 10)
+	if err != nil {
+		return Config{}, err
+	}
+	controlPollInterval, err := durationEnv("RELAY_CONTROL_POLL_INTERVAL", 250*time.Millisecond)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
-		Environment:     stringEnv("RELAY_ENV", "development"),
-		HTTPAddr:        stringEnv("RELAY_HTTP_ADDR", ":8080"),
-		DatabaseURL:     strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		LogLevel:        stringEnv("RELAY_LOG_LEVEL", "info"),
-		DevUserEmail:    stringEnv("RELAY_DEV_USER_EMAIL", "developer@relay.local"),
-		MaxRequestBytes: maxRequestBytes,
-		ShutdownTimeout: shutdownTimeout,
+		Environment:         stringEnv("RELAY_ENV", "development"),
+		HTTPAddr:            stringEnv("RELAY_HTTP_ADDR", ":8080"),
+		DatabaseURL:         strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		NATSURL:             stringEnv("NATS_URL", "nats://localhost:4222"),
+		LogLevel:            stringEnv("RELAY_LOG_LEVEL", "info"),
+		DevUserEmail:        stringEnv("RELAY_DEV_USER_EMAIL", "developer@relay.local"),
+		MaxRequestBytes:     maxRequestBytes,
+		ShutdownTimeout:     shutdownTimeout,
+		GlobalConcurrency:   int32(globalConcurrency),
+		RunConcurrency:      int32(runConcurrency),
+		ControlPollInterval: controlPollInterval,
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")
@@ -46,6 +66,15 @@ func Load() (Config, error) {
 	}
 	if cfg.ShutdownTimeout <= 0 || cfg.ShutdownTimeout > time.Minute {
 		return Config{}, errors.New("RELAY_SHUTDOWN_TIMEOUT must be positive and at most 1m")
+	}
+	if cfg.GlobalConcurrency < 1 || cfg.GlobalConcurrency > 10000 {
+		return Config{}, errors.New("RELAY_GLOBAL_CONCURRENCY must be between 1 and 10000")
+	}
+	if cfg.RunConcurrency < 1 || cfg.RunConcurrency > cfg.GlobalConcurrency {
+		return Config{}, errors.New("RELAY_RUN_CONCURRENCY must be between 1 and RELAY_GLOBAL_CONCURRENCY")
+	}
+	if cfg.ControlPollInterval < 10*time.Millisecond || cfg.ControlPollInterval > 10*time.Second {
+		return Config{}, errors.New("RELAY_CONTROL_POLL_INTERVAL must be between 10ms and 10s")
 	}
 	if cfg.Environment != "development" {
 		return Config{}, errors.New("only development authentication is implemented; refusing to start a non-development environment")

@@ -227,6 +227,52 @@ SELECT id, current_attempt_no, current_attempt_no::bigint, sqlc.arg(input)
 FROM queued_node
 RETURNING *;
 
+-- name: AcquireSchedulerLock :exec
+SELECT pg_advisory_xact_lock(824173921);
+
+-- name: CountActiveNodes :one
+SELECT count(*)::integer
+FROM node_runs
+WHERE status IN ('queued', 'running');
+
+-- name: LockOneReadyNode :one
+SELECT
+    nr.*,
+    wr.input AS run_input,
+    wr.status AS run_status,
+    wv.definition AS workflow_definition
+FROM node_runs nr
+JOIN workflow_runs wr ON wr.id = nr.run_id
+JOIN workflow_versions wv ON wv.id = wr.workflow_version_id
+WHERE nr.status = 'ready'
+  AND (nr.next_attempt_at IS NULL OR nr.next_attempt_at <= now())
+  AND wr.status IN ('pending', 'running')
+  AND wr.cancel_requested_at IS NULL
+  AND (wr.deadline_at IS NULL OR wr.deadline_at > now())
+  AND (
+      SELECT count(*)
+      FROM node_runs active
+      WHERE active.run_id = nr.run_id
+        AND active.status IN ('queued', 'running')
+  ) < sqlc.arg(run_concurrency)::integer
+ORDER BY wr.created_at, nr.created_at, nr.id
+LIMIT 1
+FOR UPDATE OF nr SKIP LOCKED;
+
+-- name: MarkRunRunning :execrows
+UPDATE workflow_runs
+SET status = 'running',
+    started_at = COALESCE(started_at, now()),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+  AND status = 'pending';
+
+-- name: ListNodeOutputsForRun :many
+SELECT node_key, output
+FROM node_runs
+WHERE run_id = sqlc.arg(run_id)
+  AND status = 'succeeded';
+
 -- name: CreateOutboxEvent :one
 INSERT INTO outbox_events (aggregate_type, aggregate_id, topic, deduplication_id, payload)
 VALUES (
