@@ -94,7 +94,7 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.25.0
       - uses: actions/setup-node@v6
@@ -118,7 +118,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.25.0
       - uses: actions/setup-node@v6
@@ -194,7 +194,7 @@ jobs:
           exit 1
       - name: Exercise durable execution
         run: go test -tags=integration -count=1 -v ./integration
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.25.0
       - uses: actions/setup-node@v6
