@@ -9,11 +9,26 @@ func TestLoadRejectsMissingDatabaseURL(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsProductionWithDevelopmentAuth(t *testing.T) {
+func TestLoadRejectsProductionWithoutAPIKey(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://relay:secret@localhost/relay")
 	t.Setenv("RELAY_ENV", "production")
+	t.Setenv("RELAY_API_KEY", "")
+	t.Setenv("RELAY_API_KEY_FILE", "")
 	if _, err := Load(); err == nil {
-		t.Fatal("Load() error = nil, want authentication safety error")
+		t.Fatal("Load() error = nil, want missing API key error")
+	}
+}
+
+func TestLoadAcceptsProductionWithStrongAPIKey(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://relay:secret@localhost/relay")
+	t.Setenv("RELAY_ENV", "production")
+	t.Setenv("RELAY_API_KEY", "relay_test_0123456789abcdef0123456789abcdef")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.APIKey == "" {
+		t.Fatal("APIKey is empty")
 	}
 }
 

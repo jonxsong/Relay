@@ -30,6 +30,7 @@ type Config struct {
 	ModelTimeout        time.Duration
 	MCPConfigFile       string
 	PricingFile         string
+	APIKey              string
 }
 
 func Load() (Config, error) {
@@ -131,10 +132,36 @@ func Load() (Config, error) {
 		}
 		cfg.OpenAIAPIKey = apiKey
 	}
-	if cfg.Environment != "development" {
-		return Config{}, errors.New("only development authentication is implemented; refusing to start a non-development environment")
+	if cfg.Environment != "development" && cfg.Environment != "production" {
+		return Config{}, errors.New("RELAY_ENV must be development or production")
+	}
+	if cfg.Environment == "production" {
+		apiKey, err := loadRelayAPIKey()
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.APIKey = apiKey
 	}
 	return cfg, nil
+}
+
+func loadRelayAPIKey() (string, error) {
+	key := strings.TrimSpace(os.Getenv("RELAY_API_KEY"))
+	if key == "" {
+		path := strings.TrimSpace(os.Getenv("RELAY_API_KEY_FILE"))
+		if path == "" {
+			return "", errors.New("RELAY_API_KEY or RELAY_API_KEY_FILE is required in production")
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("read Relay API key file: %w", err)
+		}
+		key = strings.TrimSpace(string(contents))
+	}
+	if len(key) < 32 || strings.ContainsAny(key, "\r\n") {
+		return "", errors.New("Relay API key must be a single line with at least 32 characters")
+	}
+	return key, nil
 }
 
 func loadOpenAIAPIKey(environment string) (string, error) {

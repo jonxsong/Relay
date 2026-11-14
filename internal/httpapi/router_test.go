@@ -69,6 +69,27 @@ func TestReadinessDoesNotLeakDependencyError(t *testing.T) {
 	}
 }
 
+func TestProductionRequiresBearerAuthentication(t *testing.T) {
+	t.Parallel()
+	const apiKey = "relay_test_0123456789abcdef0123456789abcdef"
+	router := NewRouter(Dependencies{Readiness: fakeReadiness{}, Workflows: fakeWorkflows{}, DevelopmentUser: uuid.New(), MaxRequestBytes: 1024, Environment: "production", APIKey: apiKey})
+
+	unauthorized := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/", nil)
+	unauthorizedResponse := httptest.NewRecorder()
+	router.ServeHTTP(unauthorizedResponse, unauthorized)
+	if unauthorizedResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated status = %d, want %d", unauthorizedResponse.Code, http.StatusUnauthorized)
+	}
+
+	authorized := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/", nil)
+	authorized.Header.Set("Authorization", "Bearer "+apiKey)
+	authorizedResponse := httptest.NewRecorder()
+	router.ServeHTTP(authorizedResponse, authorized)
+	if authorizedResponse.Code != http.StatusOK {
+		t.Fatalf("authenticated status = %d, want %d: %s", authorizedResponse.Code, http.StatusOK, authorizedResponse.Body.String())
+	}
+}
+
 func TestCreateWorkflowRejectsUnknownFields(t *testing.T) {
 	t.Parallel()
 	router := NewRouter(Dependencies{Readiness: fakeReadiness{}, Workflows: fakeWorkflows{}, DevelopmentUser: uuid.New(), MaxRequestBytes: 4096})

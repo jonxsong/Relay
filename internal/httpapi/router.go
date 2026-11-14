@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -24,6 +25,8 @@ type Dependencies struct {
 	Runs            RunRepository
 	DevelopmentUser uuid.UUID
 	MaxRequestBytes int64
+	Environment     string
+	APIKey          string
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -43,7 +46,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		api.Get("/health/ready", readinessHandler(deps.Readiness))
 
 		api.Group(func(authenticated chi.Router) {
-			authenticated.Use(developmentAuth(deps.DevelopmentUser))
+			authenticated.Use(authentication(deps.Environment, deps.APIKey, deps.DevelopmentUser))
 			mountWorkflowRoutes(authenticated, deps.Workflows)
 			mountRunRoutes(authenticated, deps.Runs)
 		})
@@ -55,6 +58,28 @@ func NewRouter(deps Dependencies) http.Handler {
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed", nil)
 	})
 	return router
+}
+
+func authentication(environment, apiKey string, ownerID uuid.UUID) func(http.Handler) http.Handler {
+	if environment == "" || environment == "development" {
+		return developmentAuth(ownerID)
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			const prefix = "Bearer "
+			header := r.Header.Get("Authorization")
+			provided := ""
+			if strings.HasPrefix(header, prefix) {
+				provided = strings.TrimSpace(strings.TrimPrefix(header, prefix))
+			}
+			if apiKey == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(apiKey)) != 1 {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="relay"`)
+				writeError(w, r, http.StatusUnauthorized, "unauthorized", "valid bearer authentication is required", nil)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ownerContextKey{}, ownerID)))
+		})
+	}
 }
 
 func requestTimeout(timeout time.Duration) func(http.Handler) http.Handler {

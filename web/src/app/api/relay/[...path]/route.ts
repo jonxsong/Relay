@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 
 const safeSegment = /^[a-zA-Z0-9_-]+$/;
-const requestHeaders = ["accept", "content-type", "idempotency-key", "last-event-id"];
+const requestHeaders = ["accept", "authorization", "content-type", "idempotency-key", "last-event-id"];
 const responseHeaders = ["content-type", "cache-control", "location", "idempotency-replayed", "x-request-id"];
 
 async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
