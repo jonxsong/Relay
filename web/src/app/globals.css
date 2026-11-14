@@ -67,6 +67,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--purple); ou
 .icon-button { width: 36px; height: 36px; }
 .primary-action { height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 14px; border: 1px solid #8074ec; border-radius: 8px; color: white; background: linear-gradient(180deg, #8074ec, #6659d7); box-shadow: 0 6px 20px rgba(88,75,204,.2), inset 0 1px rgba(255,255,255,.18); cursor: pointer; font-size: 11px; font-weight: 700; }
 .primary-action:hover { filter: brightness(1.08); }
+.primary-action:disabled { cursor: not-allowed; filter: grayscale(.55); opacity: .46; }
 .system-banner { margin-top: 18px; min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 8px 12px; border: 1px solid rgba(251,113,133,.23); border-radius: 8px; color: #ffb1bd; background: rgba(251,113,133,.07); font-size: 11px; }
 .system-banner span { display: flex; align-items: center; gap: 8px; }
 .system-banner button { border: 0; color: #ffd6dc; background: transparent; cursor: pointer; text-decoration: underline; }
@@ -138,6 +139,23 @@ button.run-row.selected { box-shadow: inset 2px 0 var(--purple); }
 .event-list time { color: var(--faint); font-family: var(--mono); font-size: 8px; }
 .workspace-footer { display: flex; justify-content: space-between; gap: 15px; padding: 18px 2px 0; color: var(--faint); font-size: 9px; }
 .workspace-footer span { display: flex; align-items: center; gap: 6px; }
+
+.dialog-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(3,4,9,.78); backdrop-filter: blur(8px); }
+.operator-dialog { width: min(660px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; border: 1px solid #35384f; border-radius: 13px; background: #11131d; box-shadow: 0 35px 100px rgba(0,0,0,.6), inset 0 1px rgba(255,255,255,.04); }
+.compact-dialog { width: min(540px, 100%); }
+.dialog-heading { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.dialog-heading > div { display: flex; align-items: center; gap: 11px; }
+.dialog-heading h2 { margin: 0; font-size: 16px; }
+.dialog-heading p { margin: 5px 0 0; color: var(--muted); font-size: 10px; }
+.operator-dialog form { display: grid; gap: 15px; padding: 18px; }
+.operator-dialog label { display: grid; gap: 7px; color: #b8bbc9; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.operator-dialog input, .operator-dialog textarea, .operator-dialog select { width: 100%; border: 1px solid var(--line); border-radius: 7px; outline: 0; color: #e8e9f0; background: #0b0c13; font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.operator-dialog input, .operator-dialog select { height: 38px; padding: 0 11px; }
+.operator-dialog textarea { min-height: 130px; padding: 11px; resize: vertical; font-family: var(--mono); line-height: 1.6; tab-size: 2; }
+.operator-dialog input:focus, .operator-dialog textarea:focus, .operator-dialog select:focus { border-color: rgba(139,124,246,.75); box-shadow: 0 0 0 3px rgba(139,124,246,.09); }
+.form-error { margin: 0; padding: 10px 11px; border: 1px solid rgba(251,113,133,.25); border-radius: 7px; color: #ffacb9; background: rgba(251,113,133,.07); font-size: 10px; line-height: 1.5; }
+.dialog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; padding-top: 3px; }
+.dialog-actions > button:first-child { height: 36px; padding: 0 13px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: transparent; cursor: pointer; font-size: 10px; }
 
 @media (max-width: 1250px) {
   .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }

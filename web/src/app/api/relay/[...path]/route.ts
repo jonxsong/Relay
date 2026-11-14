@@ -10,7 +10,8 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     return Response.json({ error: { code: "invalid_proxy_path", message: "Invalid Relay API path" } }, { status: 400 });
   }
   const base = process.env.RELAY_API_URL ?? "http://127.0.0.1:8080/api/v1";
-  const upstreamURL = new URL(`${base.replace(/\/$/, "")}/${path.join("/")}`);
+  const trailingSlash = request.nextUrl.pathname.endsWith("/") ? "/" : "";
+  const upstreamURL = new URL(`${base.replace(/\/$/, "")}/${path.join("/")}${trailingSlash}`);
   upstreamURL.search = request.nextUrl.search;
   const headers = new Headers();
   for (const name of requestHeaders) {

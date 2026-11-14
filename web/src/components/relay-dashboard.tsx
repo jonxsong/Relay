@@ -3,23 +3,24 @@
 import {
   Activity, BarChart3, Blocks, Bot, Boxes, Braces, ChevronDown,
   CircleDollarSign, Clock3, Database, GitBranch, LayoutDashboard,
-  ListFilter, Play, RefreshCw, RotateCcw, Search, Settings,
-  ShieldCheck, Workflow as WorkflowIcon, Wrench, Zap,
+  ListFilter, Play, Plus, RefreshCw, RotateCcw, Search, Settings,
+  ShieldCheck, Workflow as WorkflowIcon, Wrench, X, Zap,
 } from "lucide-react";
 import {
   Background, Controls, Handle, MiniMap, Position, ReactFlow,
   type Edge, type Node, type NodeProps, type NodeTypes,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   eventListSchema, type ExecutionEvent, nodeListSchema, type NodeRun,
-  type Run, runListSchema, type Usage, usageSchema, type Workflow,
-  workflowListSchema,
+  type Run, runListSchema, runSchema, type Usage, usageSchema, type Workflow,
+  workflowListSchema, workflowSchema,
 } from "@/lib/contracts";
-import { relayGet } from "@/lib/relay-api";
+import { relayGet, relayPost } from "@/lib/relay-api";
 
 type ConnectionState = "loading" | "live" | "unavailable";
+type DialogKind = "workflow" | "run" | null;
 type ExecutionNodeData = { node: NodeRun };
 type ExecutionNode = Node<ExecutionNodeData, "execution">;
 
@@ -76,14 +77,30 @@ export function RelayDashboard() {
   const [connection, setConnection] = useState<ConnectionState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [dialog, setDialog] = useState<DialogKind>(null);
+  const [workflowName, setWorkflowName] = useState("");
+  const [workflowDescription, setWorkflowDescription] = useState("");
+  const [workflowDefinition, setWorkflowDefinition] = useState(`{
+  "nodes": [
+    {
+      "id": "respond",
+      "type": "llm",
+      "inputs": { "prompt": { "from": "$.input.prompt" } }
+    }
+  ]
+}`);
+  const [runWorkflowID, setRunWorkflowID] = useState("");
+  const [runInput, setRunInput] = useState(`{ "prompt": "Explain why durable agent execution matters." }`);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     setConnection("loading");
     setError(null);
     try {
       const [workflowData, runData] = await Promise.all([
-        relayGet("/workflows?page_size=100", workflowListSchema, signal),
-        relayGet("/runs?page_size=100", runListSchema, signal),
+        relayGet("/workflows/?page_size=100", workflowListSchema, signal),
+        relayGet("/runs/?page_size=100", runListSchema, signal),
       ]);
       setWorkflows(workflowData.items);
       setRuns(runData.items);
@@ -126,6 +143,47 @@ export function RelayDashboard() {
     });
     return () => controller.abort();
   }, [selectedRunID, connection]);
+
+  const openRunDialog = () => {
+    setRunWorkflowID((current) => current || workflows[0]?.id || "");
+    setMutationError(null);
+    setDialog("run");
+  };
+
+  const submitWorkflow = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setMutationError(null);
+    try {
+      const definition = JSON.parse(workflowDefinition) as unknown;
+      await relayPost("/workflows/", { name: workflowName, description: workflowDescription, definition }, workflowSchema);
+      setWorkflowName("");
+      setWorkflowDescription("");
+      setDialog(null);
+      await refresh();
+    } catch (reason) {
+      setMutationError(reason instanceof Error ? reason.message : "Unable to create workflow");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitRun = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setMutationError(null);
+    try {
+      const input = JSON.parse(runInput) as unknown;
+      const created = await relayPost(`/workflows/${runWorkflowID}/runs`, { input }, runSchema, { "Idempotency-Key": crypto.randomUUID() });
+      setDialog(null);
+      await refresh();
+      setSelectedRunID(created.id);
+    } catch (reason) {
+      setMutationError(reason instanceof Error ? reason.message : "Unable to submit run");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const selectedRun = runs.find((run) => run.id === selectedRunID) ?? null;
   const terminalRuns = runs.filter((run) => ["succeeded", "failed", "cancelled"].includes(run.status));
@@ -184,7 +242,7 @@ export function RelayDashboard() {
       <main className="workspace">
         <header className="topbar">
           <div><div className="title-row"><h1>Execution overview</h1><span className={`runtime-pill ${connection}`}><i />{connection === "live" ? "Live" : connection === "loading" ? "Connecting" : "Unavailable"}</span></div><p>Durable workflow orchestration and run intelligence</p></div>
-          <div className="topbar-actions"><label className="search-box"><Search size={15} /><input aria-label="Search runs" placeholder="Search runs" /></label><button className="icon-button" onClick={() => void refresh()} aria-label="Refresh"><RefreshCw size={17} /></button><button className="primary-action"><Play size={15} fill="currentColor" />New run</button></div>
+          <div className="topbar-actions"><label className="search-box"><Search size={15} /><input aria-label="Search runs" placeholder="Search runs" /></label><button className="icon-button" onClick={() => void refresh()} aria-label="Refresh"><RefreshCw size={17} /></button><button className="primary-action" onClick={openRunDialog} disabled={connection !== "live" || workflows.length === 0}><Play size={15} fill="currentColor" />New run</button></div>
         </header>
 
         {error ? <div className="system-banner"><span><Database size={16} />{error}</span><button onClick={() => void refresh()}>Retry connection</button></div> : null}
@@ -201,7 +259,7 @@ export function RelayDashboard() {
         <section className="graph-section">
           <div className="section-bar"><div><span className="section-index">01</span><div><h2>Live execution graph</h2><p>{selectedRun ? `Run ${selectedRun.id.slice(0, 8)} · ${selectedRun.status}` : "Select a run to inspect its durable node state"}</p></div></div><div className="section-actions"><button><ListFilter size={15} />All nodes</button><button><GitBranch size={15} />Auto layout</button></div></div>
           <div className="graph-card">
-            {flowNodes.length > 0 ? <ReactFlow nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes} fitView minZoom={0.45} maxZoom={1.8} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }}><Background color="#34354b" gap={24} size={1} /><Controls showInteractive={false} /><MiniMap nodeColor={(node) => statusColor[(node.data as ExecutionNodeData).node.status] ?? statusColor.pending} maskColor="rgba(8,9,15,.72)" /></ReactFlow> : <div className="graph-empty"><div><WorkflowIcon size={28} /></div><h3>{connection === "live" ? "No execution nodes yet" : "Connect the Relay backend"}</h3><p>{connection === "live" ? "Create a workflow and submit a run. Its durable node states will appear here in real time." : "Start the API, control plane, worker, PostgreSQL, and NATS stack to populate this console with real execution data."}</p><button className="primary-action"><WorkflowIcon size={15} />Create workflow</button></div>}
+            {flowNodes.length > 0 ? <ReactFlow nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes} fitView minZoom={0.45} maxZoom={1.8} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }}><Background color="#34354b" gap={24} size={1} /><Controls showInteractive={false} /><MiniMap nodeColor={(node) => statusColor[(node.data as ExecutionNodeData).node.status] ?? statusColor.pending} maskColor="rgba(8,9,15,.72)" /></ReactFlow> : <div className="graph-empty"><div><WorkflowIcon size={28} /></div><h3>{connection === "live" ? "No execution nodes yet" : "Connect the Relay backend"}</h3><p>{connection === "live" ? "Create a workflow and submit a run. Its durable node states will appear here in real time." : "Start the API, control plane, worker, PostgreSQL, and NATS stack to populate this console with real execution data."}</p><button className="primary-action" onClick={() => { setMutationError(null); setDialog("workflow"); }} disabled={connection !== "live"}><WorkflowIcon size={15} />Create workflow</button></div>}
             <div className="graph-legend">{["running", "succeeded", "failed", "queued"].map((status) => <span key={status}><i style={{ background: statusColor[status] }} />{status}</span>)}</div>
           </div>
         </section>
@@ -219,6 +277,10 @@ export function RelayDashboard() {
 
         <footer className="workspace-footer"><span>{workflows.length} workflows · {runs.length} runs</span><span><Boxes size={13} />PostgreSQL is authoritative · JetStream dispatches</span></footer>
       </main>
+
+      {dialog === "workflow" ? <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}><section className="operator-dialog" role="dialog" aria-modal="true" aria-labelledby="workflow-dialog-title"><div className="dialog-heading"><div><span className="section-index">NEW</span><div><h2 id="workflow-dialog-title">Create workflow</h2><p>Relay validates and stores this DAG as immutable version 1.</p></div></div><button className="icon-button" onClick={() => setDialog(null)} aria-label="Close dialog"><X size={16} /></button></div><form onSubmit={submitWorkflow}><label>Name<input required minLength={1} maxLength={120} value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Research brief" /></label><label>Description<input maxLength={500} value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="Parallel research with a final synthesis" /></label><label>Workflow definition<textarea required spellCheck={false} rows={13} value={workflowDefinition} onChange={(event) => setWorkflowDefinition(event.target.value)} /></label>{mutationError ? <p className="form-error">{mutationError}</p> : null}<div className="dialog-actions"><button type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary-action" type="submit" disabled={submitting}><Plus size={15} />{submitting ? "Creating…" : "Create workflow"}</button></div></form></section></div> : null}
+
+      {dialog === "run" ? <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}><section className="operator-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="run-dialog-title"><div className="dialog-heading"><div><span className="section-index">RUN</span><div><h2 id="run-dialog-title">Submit a run</h2><p>An idempotency key is generated for this submission.</p></div></div><button className="icon-button" onClick={() => setDialog(null)} aria-label="Close dialog"><X size={16} /></button></div><form onSubmit={submitRun}><label>Workflow<select required value={runWorkflowID} onChange={(event) => setRunWorkflowID(event.target.value)}>{workflows.map((workflow) => <option value={workflow.id} key={workflow.id}>{workflow.name}</option>)}</select></label><label>Run input<textarea required spellCheck={false} rows={8} value={runInput} onChange={(event) => setRunInput(event.target.value)} /></label>{mutationError ? <p className="form-error">{mutationError}</p> : null}<div className="dialog-actions"><button type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary-action" type="submit" disabled={submitting || !runWorkflowID}><Play size={15} />{submitting ? "Submitting…" : "Submit run"}</button></div></form></section></div> : null}
     </div>
   );
 }
