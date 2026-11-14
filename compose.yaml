@@ -38,6 +38,77 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  migrate:
+    build:
+      context: .
+      dockerfile: deploy/relay.Dockerfile
+    entrypoint: ["/app/goose"]
+    command: ["-dir", "/app/migrations", "postgres", "postgres://${POSTGRES_USER:-relay}:${POSTGRES_PASSWORD:-relay-local-only}@postgres:5432/${POSTGRES_DB:-relay}?sslmode=disable", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/relay.Dockerfile
+    restart: unless-stopped
+    environment: &relay-environment
+      DATABASE_URL: postgres://${POSTGRES_USER:-relay}:${POSTGRES_PASSWORD:-relay-local-only}@postgres:5432/${POSTGRES_DB:-relay}?sslmode=disable
+      NATS_URL: nats://nats:4222
+      RELAY_ENV: development
+      RELAY_LOG_LEVEL: ${RELAY_LOG_LEVEL:-info}
+      RELAY_PROVIDER: ${RELAY_PROVIDER:-mock}
+      RELAY_GLOBAL_CONCURRENCY: ${RELAY_GLOBAL_CONCURRENCY:-100}
+      RELAY_RUN_CONCURRENCY: ${RELAY_RUN_CONCURRENCY:-10}
+      RELAY_MAX_RETRIES: ${RELAY_MAX_RETRIES:-3}
+      RELAY_WORKER_LEASE: ${RELAY_WORKER_LEASE:-45s}
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/v1/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  controlplane:
+    build:
+      context: .
+      dockerfile: deploy/relay.Dockerfile
+    entrypoint: ["/app/relay-controlplane"]
+    restart: unless-stopped
+    environment: *relay-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  worker:
+    build:
+      context: .
+      dockerfile: deploy/relay.Dockerfile
+    entrypoint: ["/app/relay-worker"]
+    restart: unless-stopped
+    environment: *relay-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   relay-postgres:
   relay-nats:

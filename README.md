@@ -12,7 +12,7 @@
 </div>
 
 > [!IMPORTANT]
-> Relay is under active construction. The repository currently contains the architecture foundation; runnable services are being added in small, tested milestones. Do not deploy it to production until the security and recovery acceptance suites are green.
+> Relay is under active construction. The durable backend vertical slice is runnable with the deterministic mock provider; the developer console, production authentication, and full integration suite are still being built. Do not deploy it to production until the security and recovery acceptance suites are green.
 
 Relay turns an immutable workflow definition into a durable, inspectable run. PostgreSQL owns the truth. NATS JetStream wakes workers up. Every claim is fenced, every retry is bounded, and every user-visible state change is recorded as a replayable event.
 
@@ -47,7 +47,13 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Then open `http://localhost:3000`, submit the bundled example, and watch independent nodes execute in parallel. A deterministic mock model is the default; live OpenAI calls are opt-in.
+Then verify the API:
+
+```bash
+curl http://localhost:8080/api/v1/health/ready
+```
+
+The deterministic mock model is the default. The browser console and opt-in live OpenAI provider are still in progress and are not required for local execution.
 
 ## The execution contract
 
@@ -119,9 +125,9 @@ The full threat model and deployment hardening guide will be acceptance-gated be
 
 | Area | Status |
 | --- | --- |
-| Architecture and ADRs | 🟢 In progress |
-| Domain invariants | ⚪ Planned |
-| Durable scheduler and recovery | ⚪ Planned |
+| Architecture and ADRs | 🟢 Implemented |
+| Domain invariants | 🟢 Implemented and unit tested |
+| Durable scheduler and recovery | 🟡 Implemented; integration tests in progress |
 | OpenAI and MCP adapters | ⚪ Planned |
 | Developer console | ⚪ Planned |
 | Integration, browser, and load tests | ⚪ Planned |

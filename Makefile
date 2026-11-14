@@ -36,6 +36,6 @@ migrate-down:
 generate:
 	$(SQLC) generate
 
-dev: infra-up
-	@echo "Infrastructure is ready. Application services land in the vertical-slice milestone."
+dev:
+	docker compose up --build
 
