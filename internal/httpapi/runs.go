@@ -23,6 +23,7 @@ type RunRepository interface {
 	GetRun(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowRun, error)
 	ListRuns(context.Context, uuid.UUID, *string, int32) ([]db.WorkflowRun, error)
 	ListRunNodes(context.Context, uuid.UUID, uuid.UUID) ([]db.NodeRun, error)
+	ListNodeAttempts(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) ([]db.NodeAttempt, error)
 	ReplayEvents(context.Context, uuid.UUID, uuid.UUID, int64, int32) ([]db.ExecutionEvent, error)
 	ListRunUsage(context.Context, uuid.UUID, uuid.UUID) ([]db.UsageRecord, error)
 	CancelRun(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowRun, error)
@@ -70,6 +71,25 @@ type eventResponse struct {
 	OccurredAt time.Time       `json:"occurred_at"`
 }
 
+type nodeAttemptResponse struct {
+	ID              uuid.UUID       `json:"id"`
+	NodeRunID       uuid.UUID       `json:"node_run_id"`
+	AttemptNo       int32           `json:"attempt_no"`
+	Status          string          `json:"status"`
+	WorkerID        *string         `json:"worker_id,omitempty"`
+	FencingToken    int64           `json:"fencing_token"`
+	LeaseExpiresAt  *time.Time      `json:"lease_expires_at,omitempty"`
+	LastHeartbeatAt *time.Time      `json:"last_heartbeat_at,omitempty"`
+	Input           json.RawMessage `json:"input"`
+	Output          json.RawMessage `json:"output,omitempty"`
+	ErrorCode       *string         `json:"error_code,omitempty"`
+	ErrorMessage    *string         `json:"error_message,omitempty"`
+	Retryable       *bool           `json:"retryable,omitempty"`
+	QueuedAt        time.Time       `json:"queued_at"`
+	StartedAt       *time.Time      `json:"started_at,omitempty"`
+	CompletedAt     *time.Time      `json:"completed_at,omitempty"`
+}
+
 type usageResponse struct {
 	ID             uuid.UUID  `json:"id"`
 	NodeAttemptID  *uuid.UUID `json:"node_attempt_id,omitempty"`
@@ -89,12 +109,37 @@ func mountRunRoutes(router chi.Router, repository RunRepository) {
 		runs.Route("/{runID}", func(run chi.Router) {
 			run.Get("/", getRunHandler(repository))
 			run.Get("/nodes", listRunNodesHandler(repository))
+			run.Get("/nodes/{nodeRunID}/attempts", listNodeAttemptsHandler(repository))
 			run.Get("/events", replayEventsHandler(repository))
 			run.Get("/usage", runUsageHandler(repository))
 			run.Get("/stream", streamEventsHandler(repository))
 			run.Post("/cancel", cancelRunHandler(repository))
 		})
 	})
+}
+
+func listNodeAttemptsHandler(repository RunRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID, runID, ok := runRouteIDs(w, r)
+		if !ok {
+			return
+		}
+		nodeRunID, err := uuid.Parse(chi.URLParam(r, "nodeRunID"))
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_request", "node run id must be a UUID", nil)
+			return
+		}
+		attempts, err := repository.ListNodeAttempts(r.Context(), ownerID, runID, nodeRunID)
+		if err != nil {
+			writeRunRepositoryError(w, r, err)
+			return
+		}
+		items := make([]nodeAttemptResponse, 0, len(attempts))
+		for _, attempt := range attempts {
+			items = append(items, attemptFromDB(attempt))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	}
 }
 
 func runUsageHandler(repository RunRepository) http.HandlerFunc {
@@ -436,6 +481,16 @@ func eventFromDB(event db.ExecutionEvent) eventResponse {
 	return eventResponse{ID: event.ID, Sequence: event.Sequence, EventType: event.EventType,
 		NodeRunID: uuidFromPG(event.NodeRunID), AttemptID: uuidFromPG(event.AttemptID), Payload: event.Payload,
 		OccurredAt: timeFromTimestamptz(event.OccurredAt)}
+}
+
+func attemptFromDB(attempt db.NodeAttempt) nodeAttemptResponse {
+	return nodeAttemptResponse{
+		ID: attempt.ID, NodeRunID: attempt.NodeRunID, AttemptNo: attempt.AttemptNo, Status: attempt.Status,
+		WorkerID: attempt.WorkerID, FencingToken: attempt.FencingToken, LeaseExpiresAt: optionalTime(attempt.LeaseExpiresAt),
+		LastHeartbeatAt: optionalTime(attempt.LastHeartbeatAt), Input: attempt.Input, Output: attempt.Output,
+		ErrorCode: attempt.ErrorCode, ErrorMessage: attempt.ErrorMessage, Retryable: attempt.Retryable,
+		QueuedAt: timeFromTimestamptz(attempt.QueuedAt), StartedAt: optionalTime(attempt.StartedAt), CompletedAt: optionalTime(attempt.CompletedAt),
+	}
 }
 
 func optionalTime(value pgtype.Timestamptz) *time.Time {

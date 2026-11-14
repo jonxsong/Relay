@@ -41,6 +41,7 @@ type Querier interface {
 	GetWorkflow(ctx context.Context, arg GetWorkflowParams) (Workflow, error)
 	GetWorkflowDefinitionForRun(ctx context.Context, runID uuid.UUID) ([]byte, error)
 	GetWorkflowVersion(ctx context.Context, arg GetWorkflowVersionParams) (WorkflowVersion, error)
+	ListNodeAttempts(ctx context.Context, arg ListNodeAttemptsParams) ([]NodeAttempt, error)
 	ListNodeOutputsForRun(ctx context.Context, runID uuid.UUID) ([]ListNodeOutputsForRunRow, error)
 	ListRunNodes(ctx context.Context, arg ListRunNodesParams) ([]NodeRun, error)
 	ListRunUsage(ctx context.Context, arg ListRunUsageParams) ([]UsageRecord, error)

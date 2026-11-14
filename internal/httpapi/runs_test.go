@@ -15,8 +15,9 @@ import (
 )
 
 type fakeRuns struct {
-	submit func(context.Context, store.SubmitRunParams) (store.SubmittedRun, error)
-	get    func(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowRun, error)
+	submit   func(context.Context, store.SubmitRunParams) (store.SubmittedRun, error)
+	get      func(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowRun, error)
+	attempts func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) ([]db.NodeAttempt, error)
 }
 
 func (f fakeRuns) SubmitRun(ctx context.Context, params store.SubmitRunParams) (store.SubmittedRun, error) {
@@ -37,6 +38,13 @@ func (fakeRuns) ListRuns(context.Context, uuid.UUID, *string, int32) ([]db.Workf
 }
 func (fakeRuns) ListRunNodes(context.Context, uuid.UUID, uuid.UUID) ([]db.NodeRun, error) {
 	return []db.NodeRun{}, nil
+}
+
+func (f fakeRuns) ListNodeAttempts(ctx context.Context, ownerID, runID, nodeRunID uuid.UUID) ([]db.NodeAttempt, error) {
+	if f.attempts != nil {
+		return f.attempts(ctx, ownerID, runID, nodeRunID)
+	}
+	return []db.NodeAttempt{}, nil
 }
 func (fakeRuns) ReplayEvents(context.Context, uuid.UUID, uuid.UUID, int64, int32) ([]db.ExecutionEvent, error) {
 	return []db.ExecutionEvent{}, nil
@@ -103,5 +111,26 @@ func TestStreamRejectsInvalidLastEventID(t *testing.T) {
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusBadRequest, response.Body.String())
+	}
+}
+
+func TestListNodeAttemptsUsesScopedIdentifiers(t *testing.T) {
+	t.Parallel()
+	ownerID, runID, nodeRunID, attemptID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	runs := fakeRuns{attempts: func(_ context.Context, gotOwner, gotRun, gotNode uuid.UUID) ([]db.NodeAttempt, error) {
+		if gotOwner != ownerID || gotRun != runID || gotNode != nodeRunID {
+			t.Fatalf("scope = (%s, %s, %s)", gotOwner, gotRun, gotNode)
+		}
+		return []db.NodeAttempt{{ID: attemptID, NodeRunID: nodeRunID, AttemptNo: 1, Status: "succeeded", FencingToken: 1}}, nil
+	}}
+	router := NewRouter(Dependencies{Readiness: fakeReadiness{}, Workflows: fakeWorkflows{}, Runs: runs, DevelopmentUser: ownerID, MaxRequestBytes: 4096})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/runs/"+runID.String()+"/nodes/"+nodeRunID.String()+"/attempts", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte(attemptID.String())) {
+		t.Fatalf("response does not contain attempt id: %s", response.Body.String())
 	}
 }

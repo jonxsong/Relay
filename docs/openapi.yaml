@@ -219,6 +219,31 @@ paths:
                     items: {$ref: "#/components/schemas/NodeRun"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /runs/{runId}/nodes/{nodeRunId}/attempts:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+      - name: nodeRunId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      summary: List durable attempts for a run node
+      tags: [Runs]
+      operationId: listNodeAttempts
+      responses:
+        "200":
+          description: Attempts ordered by their monotonically increasing attempt number.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: "#/components/schemas/NodeAttempt"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
   /runs/{runId}/events:
     parameters:
       - $ref: "#/components/parameters/RunId"
@@ -462,6 +487,26 @@ components:
         output: {}
         error_code: {type: [string, "null"]}
         error_message: {type: [string, "null"]}
+    NodeAttempt:
+      type: object
+      required: [id, node_run_id, attempt_no, status, fencing_token, input, queued_at]
+      properties:
+        id: {type: string, format: uuid}
+        node_run_id: {type: string, format: uuid}
+        attempt_no: {type: integer, format: int32, minimum: 1}
+        status: {type: string, enum: [queued, running, succeeded, failed, cancelled, expired]}
+        worker_id: {type: [string, "null"]}
+        fencing_token: {type: integer, format: int64, minimum: 1}
+        lease_expires_at: {type: [string, "null"], format: date-time}
+        last_heartbeat_at: {type: [string, "null"], format: date-time}
+        input: {}
+        output: {}
+        error_code: {type: [string, "null"]}
+        error_message: {type: [string, "null"]}
+        retryable: {type: [boolean, "null"]}
+        queued_at: {type: string, format: date-time}
+        started_at: {type: [string, "null"], format: date-time}
+        completed_at: {type: [string, "null"], format: date-time}
     ExecutionEvent:
       type: object
       required: [id, sequence, event_type, payload, occurred_at]

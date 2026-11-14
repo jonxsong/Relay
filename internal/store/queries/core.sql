@@ -156,6 +156,16 @@ WHERE nr.run_id = sqlc.arg(run_id)
   AND wr.owner_id = sqlc.arg(owner_id)
 ORDER BY nr.created_at, nr.node_key;
 
+-- name: ListNodeAttempts :many
+SELECT na.*
+FROM node_attempts na
+JOIN node_runs nr ON nr.id = na.node_run_id
+JOIN workflow_runs wr ON wr.id = nr.run_id
+WHERE wr.id = sqlc.arg(run_id)
+  AND nr.id = sqlc.arg(node_run_id)
+  AND wr.owner_id = sqlc.arg(owner_id)
+ORDER BY na.attempt_no;
+
 -- name: ListRunUsage :many
 SELECT ur.*
 FROM usage_records ur

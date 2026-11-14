@@ -919,6 +919,60 @@ func (q *Queries) GetWorkflowVersion(ctx context.Context, arg GetWorkflowVersion
 	return i, err
 }
 
+const listNodeAttempts = `-- name: ListNodeAttempts :many
+SELECT na.id, na.node_run_id, na.attempt_no, na.status, na.worker_id, na.fencing_token, na.lease_expires_at, na.last_heartbeat_at, na.input, na.output, na.error_code, na.error_message, na.retryable, na.queued_at, na.started_at, na.completed_at
+FROM node_attempts na
+JOIN node_runs nr ON nr.id = na.node_run_id
+JOIN workflow_runs wr ON wr.id = nr.run_id
+WHERE wr.id = $1
+  AND nr.id = $2
+  AND wr.owner_id = $3
+ORDER BY na.attempt_no
+`
+
+type ListNodeAttemptsParams struct {
+	RunID     uuid.UUID `json:"run_id"`
+	NodeRunID uuid.UUID `json:"node_run_id"`
+	OwnerID   uuid.UUID `json:"owner_id"`
+}
+
+func (q *Queries) ListNodeAttempts(ctx context.Context, arg ListNodeAttemptsParams) ([]NodeAttempt, error) {
+	rows, err := q.db.Query(ctx, listNodeAttempts, arg.RunID, arg.NodeRunID, arg.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []NodeAttempt{}
+	for rows.Next() {
+		var i NodeAttempt
+		if err := rows.Scan(
+			&i.ID,
+			&i.NodeRunID,
+			&i.AttemptNo,
+			&i.Status,
+			&i.WorkerID,
+			&i.FencingToken,
+			&i.LeaseExpiresAt,
+			&i.LastHeartbeatAt,
+			&i.Input,
+			&i.Output,
+			&i.ErrorCode,
+			&i.ErrorMessage,
+			&i.Retryable,
+			&i.QueuedAt,
+			&i.StartedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listNodeOutputsForRun = `-- name: ListNodeOutputsForRun :many
 SELECT node_key, output
 FROM node_runs

@@ -193,6 +193,19 @@ func (s *Store) ListRunNodes(ctx context.Context, ownerID, runID uuid.UUID) ([]d
 	return nodes, nil
 }
 
+func (s *Store) ListNodeAttempts(ctx context.Context, ownerID, runID, nodeRunID uuid.UUID) ([]db.NodeAttempt, error) {
+	if _, err := s.GetRun(ctx, ownerID, runID); err != nil {
+		return nil, err
+	}
+	attempts, err := s.queries.ListNodeAttempts(ctx, db.ListNodeAttemptsParams{
+		RunID: runID, NodeRunID: nodeRunID, OwnerID: ownerID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list node attempts: %w", err)
+	}
+	return attempts, nil
+}
+
 func (s *Store) ReplayEvents(ctx context.Context, ownerID, runID uuid.UUID, afterSequence int64, pageSize int32) ([]db.ExecutionEvent, error) {
 	if _, err := s.GetRun(ctx, ownerID, runID); err != nil {
 		return nil, err
