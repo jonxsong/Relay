@@ -43,3 +43,18 @@ The build is organized as reviewable vertical milestones. Each milestone must ke
 - Deterministic load harness for 1, 5, 10, and 25 concurrent agents.
 - Acceptance: CI gates the full suite; benchmark results are recorded from actual runs only.
 
+## Acceptance record — 2026-11-14
+
+| Gate | Verified result |
+| --- | --- |
+| Domain and API unit suite | `go vet ./...` and `go test ./...` passed |
+| Data-race suite | `go test -race ./...` passed in `golang:1.27.4-bookworm` |
+| Failure recovery | Real PostgreSQL test passed: outbox crash window, redelivery, duplicate claims, lease expiry, stale completion rejection, and recovered completion |
+| Durable vertical slice | Real PostgreSQL + NATS run passed in 15.52s, including idempotent replay/conflict and ordered event replay |
+| API contract | Generated TypeScript client matches `docs/openapi.yaml` |
+| Developer console | TypeScript, ESLint, production build, and Playwright create/run/inspect/search/settings/cancel flow passed |
+| Public image | `deploy/render.Dockerfile` built and its production-auth browser flow passed against the all-in-one evaluation container |
+| Load harness | 80 measured deterministic runs completed; see [`benchmarks/results-local.md`](../benchmarks/results-local.md) |
+
+The paid OpenAI call is deliberately opt-in and is documented in [`provider-smoke-test.md`](provider-smoke-test.md); automated acceptance never spends provider credits.
+
