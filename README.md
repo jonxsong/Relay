@@ -141,7 +141,7 @@ The full threat model and deployment hardening guide will be acceptance-gated be
 | --- | --- |
 | Architecture and ADRs | 🟢 Implemented |
 | Domain invariants | 🟢 Implemented and unit tested |
-| Durable scheduler and recovery | 🟢 Implemented; vertical integration test passing |
+| Durable scheduler and recovery | 🟢 Crash window, lease recovery, stale completion, and duplicate claims integration-tested |
 | OpenAI adapter | 🟢 Implemented and contract tested |
 | MCP adapter | 🟡 Allowlist, schema, approval, SSRF, and size gates implemented; live smoke test pending |
 | Developer console | 🟢 Live overview, DAG, events, usage, create, run, and cancel actions |

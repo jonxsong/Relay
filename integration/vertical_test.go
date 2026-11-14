@@ -64,6 +64,12 @@ func TestDurableVerticalSlice(t *testing.T) {
 	headers := map[string]string{"Idempotency-Key": "integration-" + suffix}
 	var submitted runResponse
 	requestJSON(t, client, http.MethodPost, baseURL+"/workflows/"+workflow.ID+"/runs", []byte(`{"input":{"prompt":"integration"}}`), headers, http.StatusAccepted, &submitted)
+	var replayed runResponse
+	requestJSON(t, client, http.MethodPost, baseURL+"/workflows/"+workflow.ID+"/runs", []byte(`{"input":{"prompt":"integration"}}`), headers, http.StatusAccepted, &replayed)
+	if replayed.ID != submitted.ID {
+		t.Fatalf("idempotent replay run = %q, want %q", replayed.ID, submitted.ID)
+	}
+	requestJSON(t, client, http.MethodPost, baseURL+"/workflows/"+workflow.ID+"/runs", []byte(`{"input":{"prompt":"different"}}`), headers, http.StatusConflict, nil)
 
 	deadline := time.Now().Add(20 * time.Second)
 	var run runResponse
@@ -109,6 +115,14 @@ func TestDurableVerticalSlice(t *testing.T) {
 	}
 	if last := events.Items[len(events.Items)-1].EventType; last != "run.succeeded" {
 		t.Fatalf("last event = %q, want run.succeeded", last)
+	}
+	resumeAfter := events.Items[len(events.Items)/2].Sequence
+	var replayedEvents struct {
+		Items []eventResponse `json:"items"`
+	}
+	requestJSON(t, client, http.MethodGet, fmt.Sprintf("%s/runs/%s/events?after=%d", baseURL, run.ID, resumeAfter), nil, nil, http.StatusOK, &replayedEvents)
+	if len(replayedEvents.Items) == 0 || replayedEvents.Items[0].Sequence != resumeAfter+1 {
+		t.Fatalf("event replay after %d = %+v", resumeAfter, replayedEvents.Items)
 	}
 
 	var usage struct {
