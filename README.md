@@ -53,7 +53,7 @@ Then verify the API:
 curl http://localhost:8080/api/v1/health/ready
 ```
 
-The deterministic mock model is the default. To opt into OpenAI, set `RELAY_PROVIDER=openai` and provide `OPENAI_API_KEY` or mount a secret file through `OPENAI_API_KEY_FILE`. Tool nodes remain fail-closed unless `RELAY_MCP_CONFIG_FILE` points to an explicit connection and tool allowlist; use [`config/mcp.example.json`](config/mcp.example.json) as the schema. Secrets are referenced by environment-variable name and are never stored in workflow JSON.
+The deterministic mock model is the default. To opt into OpenAI, set `RELAY_PROVIDER=openai` and provide `OPENAI_API_KEY` or mount a secret file through `OPENAI_API_KEY_FILE`. Optional structured outputs are checked again locally after the provider responds. Pricing is loaded only from a versioned file selected by `RELAY_PRICING_FILE`; [`config/pricing.example.json`](config/pricing.example.json) intentionally contains no invented rates, so unknown costs stay unknown. Tool nodes remain fail-closed unless `RELAY_MCP_CONFIG_FILE` points to an explicit connection and tool allowlist; use [`config/mcp.example.json`](config/mcp.example.json) as the schema. Secrets are referenced by environment-variable name and are never stored in workflow JSON.
 
 ## The execution contract
 

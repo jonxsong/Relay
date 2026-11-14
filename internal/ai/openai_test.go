@@ -35,13 +35,21 @@ func TestOpenAIExecuteRecordsSafeOutputAndUsage(t *testing.T) {
 		}},
 		Usage: responses.ResponseUsage{InputTokens: 12, OutputTokens: 4},
 	}}
-	executor := &OpenAI{responses: fake, defaultModel: "gpt-default", maxOutputTokens: 128, timeout: time.Second}
+	executor := &OpenAI{
+		responses: fake, defaultModel: "gpt-default", maxOutputTokens: 128, timeout: time.Second,
+		pricing: &PricingCatalog{Version: "test-prices", Models: map[string]ModelPrice{
+			"gpt-test": {InputMicrousdPerMillion: 1_000_000, OutputMicrousdPerMillion: 2_000_000},
+		}},
+	}
 	result, err := executor.Execute(context.Background(), "llm", json.RawMessage(`{"prompt":"Say hello"}`))
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	if result.Usage == nil || result.Usage.Provider != "openai" || *result.Usage.InputTokens != 12 || *result.Usage.OutputTokens != 4 {
 		t.Fatalf("unexpected usage: %#v", result.Usage)
+	}
+	if result.Usage.CostMicrousd == nil || *result.Usage.CostMicrousd != 20 || result.Usage.PricingVersion == nil || *result.Usage.PricingVersion != "test-prices" {
+		t.Fatalf("unexpected configured cost: %#v", result.Usage)
 	}
 	if got := fake.params.Input.OfString.Value; got != "Say hello" {
 		t.Fatalf("prompt = %q", got)
@@ -52,6 +60,53 @@ func TestOpenAIExecuteRecordsSafeOutputAndUsage(t *testing.T) {
 	}
 	if output["text"] != "hello" || output["response_id"] != "resp_123" {
 		t.Fatalf("unexpected output: %#v", output)
+	}
+}
+
+func TestOpenAIExecuteEnforcesStructuredOutput(t *testing.T) {
+	fake := &fakeResponses{response: &responses.Response{
+		ID: "resp_json", Status: responses.ResponseStatusCompleted, Model: shared.ResponsesModel("gpt-test"),
+		Output: []responses.ResponseOutputItemUnion{{
+			Type: "message", Role: "assistant", Status: "completed",
+			Content: []responses.ResponseOutputMessageContentUnion{{Type: "output_text", Text: `{"answer":"yes"}`}},
+		}},
+	}}
+	executor := &OpenAI{responses: fake, defaultModel: "gpt-default", maxOutputTokens: 128, timeout: time.Second}
+	result, err := executor.Execute(context.Background(), "llm", json.RawMessage(`{
+		"prompt":"Answer yes",
+		"output_name":"answer",
+		"output_schema":{"type":"object","required":["answer"],"properties":{"answer":{"type":"string"}},"additionalProperties":false}
+	}`))
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if schema := fake.params.Text.Format.GetSchema(); schema == nil || fake.params.Text.Format.GetStrict() == nil || !*fake.params.Text.Format.GetStrict() {
+		t.Fatalf("structured output was not sent strictly: %#v", fake.params.Text)
+	}
+	var output struct {
+		Structured map[string]any `json:"structured"`
+	}
+	if err := json.Unmarshal(result.Output, &output); err != nil || output.Structured["answer"] != "yes" {
+		t.Fatalf("unexpected structured output: %s (%v)", result.Output, err)
+	}
+}
+
+func TestOpenAIExecuteRejectsInvalidStructuredOutput(t *testing.T) {
+	fake := &fakeResponses{response: &responses.Response{
+		ID: "resp_json", Status: responses.ResponseStatusCompleted, Model: shared.ResponsesModel("gpt-test"),
+		Output: []responses.ResponseOutputItemUnion{{
+			Type: "message", Role: "assistant", Status: "completed",
+			Content: []responses.ResponseOutputMessageContentUnion{{Type: "output_text", Text: `{"answer":7}`}},
+		}},
+	}}
+	executor := &OpenAI{responses: fake, defaultModel: "gpt-default", maxOutputTokens: 128, timeout: time.Second}
+	_, err := executor.Execute(context.Background(), "llm", json.RawMessage(`{
+		"prompt":"Answer",
+		"output_schema":{"type":"object","required":["answer"],"properties":{"answer":{"type":"string"}}}
+	}`))
+	var executionErr *worker.ExecutionError
+	if !errors.As(err, &executionErr) || executionErr.Code != "invalid_provider_output" {
+		t.Fatalf("unexpected error: %#v", err)
 	}
 }
 

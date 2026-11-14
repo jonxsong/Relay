@@ -9,6 +9,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jonxsong/Relay/internal/schema"
 	"github.com/jonxsong/Relay/internal/worker"
 )
 
@@ -52,7 +53,7 @@ func TestExecutorCallsAllowlistedToolWithValidatedSchemas(t *testing.T) {
 		"properties":           map[string]any{"id": map[string]any{"type": "string"}},
 		"additionalProperties": false,
 	}
-	if err := validateSchema(inputSchema, map[string]any{"id": "42"}); err != nil {
+	if err := schema.Validate(inputSchema, map[string]any{"id": "42"}); err != nil {
 		t.Fatalf("test schema is invalid: %v", err)
 	}
 	session := &fakeSession{

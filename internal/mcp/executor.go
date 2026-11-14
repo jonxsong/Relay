@@ -9,10 +9,9 @@ import (
 	"io"
 	"strings"
 
-	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
-	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
-
+	"github.com/jonxsong/Relay/internal/schema"
 	"github.com/jonxsong/Relay/internal/worker"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const maxToolPages = 20
@@ -81,7 +80,7 @@ func (e *Executor) Execute(ctx context.Context, nodeType string, input json.RawM
 			return worker.ExecutionResult{}, executionError("invalid_tool_input", false, "tool arguments must be a JSON object")
 		}
 	}
-	if err := validateSchema(tool.InputSchema, arguments); err != nil {
+	if err := schema.Validate(tool.InputSchema, arguments); err != nil {
 		return worker.ExecutionResult{}, executionError("invalid_tool_input", false, "tool arguments do not match the declared schema")
 	}
 	result, err := session.CallTool(requestContext, &sdk.CallToolParams{Name: request.Tool, Arguments: arguments})
@@ -98,7 +97,7 @@ func (e *Executor) Execute(ctx context.Context, nodeType string, input json.RawM
 		if result.StructuredContent == nil {
 			return worker.ExecutionResult{}, executionError("invalid_tool_output", false, "tool omitted required structured output")
 		}
-		if err := validateSchema(tool.OutputSchema, result.StructuredContent); err != nil {
+		if err := schema.Validate(tool.OutputSchema, result.StructuredContent); err != nil {
 			return worker.ExecutionResult{}, executionError("invalid_tool_output", false, "tool output does not match the declared schema")
 		}
 	}
@@ -149,30 +148,6 @@ func findTool(ctx context.Context, session Session, name string) (*sdk.Tool, err
 		cursor = result.NextCursor
 	}
 	return nil, executionError("tool_discovery_failed", false, "MCP tool list exceeded the pagination limit")
-}
-
-func validateSchema(rawSchema, value any) error {
-	if rawSchema == nil {
-		return errors.New("schema is required")
-	}
-	schemaBytes, err := json.Marshal(rawSchema)
-	if err != nil {
-		return err
-	}
-	var normalized any
-	if err := json.Unmarshal(schemaBytes, &normalized); err != nil {
-		return err
-	}
-	compiler := jsonschema.NewCompiler()
-	compiler.DefaultDraft(jsonschema.Draft2020)
-	if err := compiler.AddResource("relay://tool-schema.json", normalized); err != nil {
-		return err
-	}
-	schema, err := compiler.Compile("relay://tool-schema.json")
-	if err != nil {
-		return err
-	}
-	return schema.Validate(value)
 }
 
 func marshalBoundedResult(result *sdk.CallToolResult, maximum int64) (json.RawMessage, error) {

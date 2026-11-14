@@ -49,7 +49,14 @@ func run() error {
 	localExecutor := worker.DeterministicMock{}
 	var llmExecutor worker.Executor = localExecutor
 	if cfg.Provider == "openai" {
-		openAIExecutor, openAIErr := ai.NewOpenAI(cfg.OpenAIAPIKey, cfg.DefaultModel, cfg.MaxOutputTokens, cfg.ModelTimeout)
+		var pricing *ai.PricingCatalog
+		if cfg.PricingFile != "" {
+			pricing, err = ai.LoadPricingCatalog(cfg.PricingFile)
+			if err != nil {
+				return err
+			}
+		}
+		openAIExecutor, openAIErr := ai.NewOpenAI(cfg.OpenAIAPIKey, cfg.DefaultModel, cfg.MaxOutputTokens, cfg.ModelTimeout, pricing)
 		if openAIErr != nil {
 			return openAIErr
 		}

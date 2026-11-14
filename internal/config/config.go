@@ -29,6 +29,7 @@ type Config struct {
 	MaxOutputTokens     int64
 	ModelTimeout        time.Duration
 	MCPConfigFile       string
+	PricingFile         string
 }
 
 func Load() (Config, error) {
@@ -88,6 +89,7 @@ func Load() (Config, error) {
 		MaxOutputTokens:     maxOutputTokens,
 		ModelTimeout:        modelTimeout,
 		MCPConfigFile:       stringEnv("RELAY_MCP_CONFIG_FILE", ""),
+		PricingFile:         stringEnv("RELAY_PRICING_FILE", ""),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")
