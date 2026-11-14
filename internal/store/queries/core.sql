@@ -174,6 +174,12 @@ WHERE ur.run_id = sqlc.arg(run_id)
   AND wr.owner_id = sqlc.arg(owner_id)
 ORDER BY ur.recorded_at, ur.id;
 
+-- name: GetRunKnownUsageCost :one
+SELECT COALESCE(sum(cost_microusd), 0)::bigint
+FROM usage_records
+WHERE run_id = sqlc.arg(run_id)
+  AND cost_microusd IS NOT NULL;
+
 -- name: CreateUsageRecord :one
 INSERT INTO usage_records (
     run_id,
@@ -552,6 +558,28 @@ UPDATE node_runs
 SET status = 'failed',
     error_code = 'run_deadline_exceeded',
     error_message = 'run deadline elapsed before execution completed',
+    completed_at = now(),
+    updated_at = now()
+WHERE run_id = sqlc.arg(run_id)
+  AND status NOT IN ('succeeded', 'failed', 'cancelled', 'skipped')
+RETURNING *;
+
+-- name: FailAttemptsForCostBudget :execrows
+UPDATE node_attempts
+SET status = 'failed',
+    retryable = false,
+    error_code = 'cost_budget_exceeded',
+    error_message = 'known provider cost exceeded the run budget',
+    completed_at = now(),
+    lease_expires_at = NULL
+WHERE node_run_id IN (SELECT id FROM node_runs WHERE run_id = sqlc.arg(run_id))
+  AND status IN ('queued', 'running');
+
+-- name: FailNodesForCostBudget :many
+UPDATE node_runs
+SET status = 'failed',
+    error_code = 'cost_budget_exceeded',
+    error_message = 'known provider cost exceeded the run budget',
     completed_at = now(),
     updated_at = now()
 WHERE run_id = sqlc.arg(run_id)

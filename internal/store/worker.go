@@ -176,10 +176,43 @@ func (s *Store) CompleteAttemptSuccess(ctx context.Context, claim AttemptClaim, 
 			return fmt.Errorf("record attempt usage: %w", err)
 		}
 	}
-	if err := unlockDependants(ctx, q, claim); err != nil {
+	if err := appendEvent(ctx, q, claim.RunID, "node.succeeded", &claim.NodeRunID, &claim.AttemptID, output); err != nil {
 		return err
 	}
-	if err := appendEvent(ctx, q, claim.RunID, "node.succeeded", &claim.NodeRunID, &claim.AttemptID, output); err != nil {
+	if run.CostBudgetMicrousd != nil {
+		knownCost, err := q.GetRunKnownUsageCost(ctx, claim.RunID)
+		if err != nil {
+			return fmt.Errorf("calculate run usage cost: %w", err)
+		}
+		if knownCost > *run.CostBudgetMicrousd {
+			if _, err := q.FailAttemptsForCostBudget(ctx, claim.RunID); err != nil {
+				return fmt.Errorf("fence over-budget attempts: %w", err)
+			}
+			failedNodes, err := q.FailNodesForCostBudget(ctx, claim.RunID)
+			if err != nil {
+				return fmt.Errorf("fail over-budget nodes: %w", err)
+			}
+			code := "cost_budget_exceeded"
+			message := "known provider cost exceeded the run budget"
+			if _, err := q.CompleteRunFailure(ctx, db.CompleteRunFailureParams{ID: claim.RunID, ErrorCode: &code, ErrorMessage: message}); err != nil {
+				return fmt.Errorf("fail over-budget run: %w", err)
+			}
+			payload, _ := json.Marshal(map[string]any{"error_code": code, "known_cost_microusd": knownCost, "budget_microusd": *run.CostBudgetMicrousd})
+			for _, node := range failedNodes {
+				if err := appendEvent(ctx, q, claim.RunID, "node.failed", &node.ID, nil, payload); err != nil {
+					return err
+				}
+			}
+			if err := appendEvent(ctx, q, claim.RunID, "run.failed", nil, nil, payload); err != nil {
+				return err
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return classifyWriteError("commit over-budget completion", err)
+			}
+			return nil
+		}
+	}
+	if err := unlockDependants(ctx, q, claim); err != nil {
 		return err
 	}
 	remaining, err := q.CountNonTerminalNodes(ctx, claim.RunID)

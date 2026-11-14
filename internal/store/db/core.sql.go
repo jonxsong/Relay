@@ -771,6 +771,26 @@ func (q *Queries) ExpireAttempt(ctx context.Context, arg ExpireAttemptParams) (i
 	return result.RowsAffected(), nil
 }
 
+const failAttemptsForCostBudget = `-- name: FailAttemptsForCostBudget :execrows
+UPDATE node_attempts
+SET status = 'failed',
+    retryable = false,
+    error_code = 'cost_budget_exceeded',
+    error_message = 'known provider cost exceeded the run budget',
+    completed_at = now(),
+    lease_expires_at = NULL
+WHERE node_run_id IN (SELECT id FROM node_runs WHERE run_id = $1)
+  AND status IN ('queued', 'running')
+`
+
+func (q *Queries) FailAttemptsForCostBudget(ctx context.Context, runID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, failAttemptsForCostBudget, runID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const failAttemptsForRunDeadline = `-- name: FailAttemptsForRunDeadline :execrows
 UPDATE node_attempts
 SET status = 'failed',
@@ -789,6 +809,55 @@ func (q *Queries) FailAttemptsForRunDeadline(ctx context.Context, runID uuid.UUI
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const failNodesForCostBudget = `-- name: FailNodesForCostBudget :many
+UPDATE node_runs
+SET status = 'failed',
+    error_code = 'cost_budget_exceeded',
+    error_message = 'known provider cost exceeded the run budget',
+    completed_at = now(),
+    updated_at = now()
+WHERE run_id = $1
+  AND status NOT IN ('succeeded', 'failed', 'cancelled', 'skipped')
+RETURNING id, run_id, node_key, node_type, status, dependency_count, succeeded_dependency_count, current_attempt_no, next_attempt_at, output, error_code, error_message, started_at, completed_at, created_at, updated_at
+`
+
+func (q *Queries) FailNodesForCostBudget(ctx context.Context, runID uuid.UUID) ([]NodeRun, error) {
+	rows, err := q.db.Query(ctx, failNodesForCostBudget, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []NodeRun{}
+	for rows.Next() {
+		var i NodeRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.NodeKey,
+			&i.NodeType,
+			&i.Status,
+			&i.DependencyCount,
+			&i.SucceededDependencyCount,
+			&i.CurrentAttemptNo,
+			&i.NextAttemptAt,
+			&i.Output,
+			&i.ErrorCode,
+			&i.ErrorMessage,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const failNodesForRunDeadline = `-- name: FailNodesForRunDeadline :many
@@ -965,6 +1034,20 @@ func (q *Queries) GetRunByID(ctx context.Context, id uuid.UUID) (WorkflowRun, er
 		&i.NextEventSequence,
 	)
 	return i, err
+}
+
+const getRunKnownUsageCost = `-- name: GetRunKnownUsageCost :one
+SELECT COALESCE(sum(cost_microusd), 0)::bigint
+FROM usage_records
+WHERE run_id = $1
+  AND cost_microusd IS NOT NULL
+`
+
+func (q *Queries) GetRunKnownUsageCost(ctx context.Context, runID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getRunKnownUsageCost, runID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const getWorkflow = `-- name: GetWorkflow :one
