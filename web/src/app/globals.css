@@ -215,12 +215,18 @@ button.run-row.selected { box-shadow: inset 2px 0 var(--purple); }
 
 .dialog-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(3,4,9,.78); backdrop-filter: blur(8px); }
 .operator-dialog { width: min(660px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; border: 1px solid #35384f; border-radius: 13px; background: #11131d; box-shadow: 0 35px 100px rgba(0,0,0,.6), inset 0 1px rgba(255,255,255,.04); }
+.workflow-dialog { width: min(1020px, 100%); }
 .compact-dialog { width: min(540px, 100%); }
 .dialog-heading { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
 .dialog-heading > div { display: flex; align-items: center; gap: 11px; }
 .dialog-heading h2 { margin: 0; font-size: 16px; }
 .dialog-heading p { margin: 5px 0 0; color: var(--muted); font-size: 10px; }
 .operator-dialog form { display: grid; gap: 15px; padding: 18px; }
+.workflow-form-meta { display: grid; grid-template-columns: .8fr 1.2fr; gap: 12px; }
+.workflow-definition-editor { min-height: 390px; display: grid; grid-template-columns: minmax(320px, .9fr) minmax(380px, 1.1fr); gap: 12px; }
+.workflow-definition-editor > label { min-height: 0; }
+.workflow-definition-editor textarea { height: 100%; min-height: 390px; }
+.draft-preview { min-height: 390px; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: #0b0c13; }
 .operator-dialog label { display: grid; gap: 7px; color: #b8bbc9; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .operator-dialog input, .operator-dialog textarea, .operator-dialog select { width: 100%; border: 1px solid var(--line); border-radius: 7px; outline: 0; color: #e8e9f0; background: #0b0c13; font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; }
 .operator-dialog input, .operator-dialog select { height: 38px; padding: 0 11px; }
@@ -246,6 +252,8 @@ button.run-row.selected { box-shadow: inset 2px 0 var(--purple); }
   .search-box { display: none; }
   .lower-grid { grid-template-columns: 1fr; }
   .workflow-layout { grid-template-columns: 1fr; }
+  .workflow-definition-editor { grid-template-columns: 1fr; }
+  .draft-preview { min-height: 320px; }
 }
 
 @media (max-width: 650px) {

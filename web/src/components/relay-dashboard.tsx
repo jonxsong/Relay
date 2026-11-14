@@ -27,6 +27,7 @@ type ExecutionNodeData = { node: NodeRun };
 type ExecutionNode = Node<ExecutionNodeData, "execution">;
 type WorkflowNodeData = { id: string; type: string };
 type WorkflowGraphNode = Node<WorkflowNodeData, "workflowDefinition">;
+type WorkflowDefinitionNode = { id: string; type: "llm" | "tool" | "transform" | "join"; depends_on?: string[] };
 
 const nav = [
   ["overview", LayoutDashboard, "Overview"], ["workflows", WorkflowIcon, "Workflows"],
@@ -79,6 +80,29 @@ function formatDuration(run: Run) {
 
 function compactNumber(value: number) {
   return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+
+function buildWorkflowGraph(definitions: WorkflowDefinitionNode[]) {
+  const byID = new Map(definitions.map((node) => [node.id, node]));
+  const depths = new Map<string, number>();
+  const depth = (id: string, visiting = new Set<string>()): number => {
+    const cached = depths.get(id);
+    if (cached !== undefined) return cached;
+    if (visiting.has(id)) return 0;
+    visiting.add(id);
+    const dependencies = byID.get(id)?.depends_on ?? [];
+    const value = dependencies.length === 0 ? 0 : 1 + Math.max(...dependencies.map((dependency) => depth(dependency, visiting)));
+    visiting.delete(id);
+    depths.set(id, value);
+    return value;
+  };
+  const graphNodes: WorkflowGraphNode[] = definitions.map((node) => {
+    const column = depth(node.id);
+    const row = definitions.filter((candidate) => depth(candidate.id) === column).findIndex((candidate) => candidate.id === node.id);
+    return { id: node.id, type: "workflowDefinition", data: { id: node.id, type: node.type }, position: { x: 54 + column * 240, y: 60 + Math.max(0, row) * 100 } };
+  });
+  const graphEdges: Edge[] = definitions.flatMap((node) => (node.depends_on ?? []).filter((dependency) => byID.has(dependency)).map((dependency) => ({ id: `${dependency}-${node.id}`, source: dependency, target: node.id, style: { stroke: "#655bd4", strokeWidth: 1.5 } })));
+  return { nodes: graphNodes, edges: graphEdges };
 }
 
 function Metric({ value, label, Icon, tone }: { value: string; label: string; Icon: typeof Activity; tone: string }) {
@@ -357,27 +381,23 @@ export function RelayDashboard() {
   }, [nodes]);
   const workflowGraph = useMemo(() => {
     const definitions = selectedWorkflow?.version?.definition?.nodes ?? [];
-    const byID = new Map(definitions.map((node) => [node.id, node]));
-    const depths = new Map<string, number>();
-    const depth = (id: string, visiting = new Set<string>()): number => {
-      const cached = depths.get(id);
-      if (cached !== undefined) return cached;
-      if (visiting.has(id)) return 0;
-      visiting.add(id);
-      const dependencies = byID.get(id)?.depends_on ?? [];
-      const value = dependencies.length === 0 ? 0 : 1 + Math.max(...dependencies.map((dependency) => depth(dependency, visiting)));
-      visiting.delete(id);
-      depths.set(id, value);
-      return value;
-    };
-    const graphNodes: WorkflowGraphNode[] = definitions.map((node) => {
-      const column = depth(node.id);
-      const row = definitions.filter((candidate) => depth(candidate.id) === column).findIndex((candidate) => candidate.id === node.id);
-      return { id: node.id, type: "workflowDefinition", data: { id: node.id, type: node.type }, position: { x: 54 + column * 240, y: 60 + Math.max(0, row) * 100 } };
-    });
-    const graphEdges: Edge[] = definitions.flatMap((node) => (node.depends_on ?? []).map((dependency) => ({ id: `${dependency}-${node.id}`, source: dependency, target: node.id, style: { stroke: "#655bd4", strokeWidth: 1.5 } })));
-    return { nodes: graphNodes, edges: graphEdges };
+    return buildWorkflowGraph(definitions);
   }, [selectedWorkflow]);
+  const workflowDraftGraph = useMemo(() => {
+    try {
+      const draft = JSON.parse(workflowDefinition) as { nodes?: unknown };
+      if (!Array.isArray(draft.nodes)) return null;
+      const nodes = draft.nodes.filter((node): node is WorkflowDefinitionNode => {
+        if (!node || typeof node !== "object") return false;
+        const candidate = node as Record<string, unknown>;
+        return typeof candidate.id === "string" && ["llm", "tool", "transform", "join"].includes(String(candidate.type)) && (candidate.depends_on === undefined || Array.isArray(candidate.depends_on));
+      });
+      if (nodes.length !== draft.nodes.length || nodes.length === 0) return null;
+      return buildWorkflowGraph(nodes);
+    } catch {
+      return null;
+    }
+  }, [workflowDefinition]);
 
   return (
     <div className="app-shell">
@@ -440,7 +460,7 @@ export function RelayDashboard() {
         <footer className="workspace-footer"><span>{workflows.length} workflows · {runs.length} runs</span><span><Boxes size={13} />PostgreSQL is authoritative · JetStream dispatches</span></footer>
       </main>
 
-      {dialog === "workflow" ? <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}><section className="operator-dialog" role="dialog" aria-modal="true" aria-labelledby="workflow-dialog-title"><div className="dialog-heading"><div><span className="section-index">NEW</span><div><h2 id="workflow-dialog-title">Create workflow</h2><p>Relay validates and stores this DAG as immutable version 1.</p></div></div><button className="icon-button" onClick={() => setDialog(null)} aria-label="Close dialog"><X size={16} /></button></div><form onSubmit={submitWorkflow}><label>Name<input required minLength={1} maxLength={120} value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Research brief" /></label><label>Description<input maxLength={500} value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="Parallel research with a final synthesis" /></label><label>Workflow definition<textarea required spellCheck={false} rows={13} value={workflowDefinition} onChange={(event) => setWorkflowDefinition(event.target.value)} /></label>{mutationError ? <p className="form-error">{mutationError}</p> : null}<div className="dialog-actions"><button type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary-action" type="submit" disabled={submitting}><Plus size={15} />{submitting ? "Creating…" : "Create workflow"}</button></div></form></section></div> : null}
+      {dialog === "workflow" ? <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}><section className="operator-dialog workflow-dialog" role="dialog" aria-modal="true" aria-labelledby="workflow-dialog-title"><div className="dialog-heading"><div><span className="section-index">NEW</span><div><h2 id="workflow-dialog-title">Create workflow</h2><p>Relay validates and stores this DAG as immutable version 1.</p></div></div><button className="icon-button" onClick={() => setDialog(null)} aria-label="Close dialog"><X size={16} /></button></div><form onSubmit={submitWorkflow}><div className="workflow-form-meta"><label>Name<input required minLength={1} maxLength={120} value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} placeholder="Research brief" /></label><label>Description<input maxLength={500} value={workflowDescription} onChange={(event) => setWorkflowDescription(event.target.value)} placeholder="Parallel research with a final synthesis" /></label></div><div className="workflow-definition-editor"><label>Workflow definition<textarea required spellCheck={false} rows={16} value={workflowDefinition} onChange={(event) => setWorkflowDefinition(event.target.value)} /></label><div className="draft-preview" aria-label="Workflow draft preview">{workflowDraftGraph ? <ReactFlow nodes={workflowDraftGraph.nodes} edges={workflowDraftGraph.edges} nodeTypes={nodeTypes} fitView nodesDraggable={false} nodesConnectable={false} minZoom={0.4} maxZoom={1.4}><Background color="#34354b" gap={20} size={1} /><Controls showInteractive={false} /></ReactFlow> : <div className="view-empty"><GitBranch size={22} /><h3>Valid graph preview</h3><p>Enter a non-empty node array to preview the execution topology.</p></div>}</div></div>{mutationError ? <p className="form-error">{mutationError}</p> : null}<div className="dialog-actions"><button type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary-action" type="submit" disabled={submitting}><Plus size={15} />{submitting ? "Creating…" : "Create workflow"}</button></div></form></section></div> : null}
 
       {dialog === "run" ? <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}><section className="operator-dialog compact-dialog" role="dialog" aria-modal="true" aria-labelledby="run-dialog-title"><div className="dialog-heading"><div><span className="section-index">RUN</span><div><h2 id="run-dialog-title">Submit a run</h2><p>An idempotency key is generated for this submission.</p></div></div><button className="icon-button" onClick={() => setDialog(null)} aria-label="Close dialog"><X size={16} /></button></div><form onSubmit={submitRun}><label>Workflow<select required value={runWorkflowID} onChange={(event) => setRunWorkflowID(event.target.value)}>{workflows.map((workflow) => <option value={workflow.id} key={workflow.id}>{workflow.name}</option>)}</select></label><label>Run input<textarea required spellCheck={false} rows={8} value={runInput} onChange={(event) => setRunInput(event.target.value)} /></label>{mutationError ? <p className="form-error">{mutationError}</p> : null}<div className="dialog-actions"><button type="button" onClick={() => setDialog(null)}>Cancel</button><button className="primary-action" type="submit" disabled={submitting || !runWorkflowID}><Play size={15} />{submitting ? "Submitting…" : "Submit run"}</button></div></form></section></div> : null}
 
