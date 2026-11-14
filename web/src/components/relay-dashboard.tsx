@@ -3,7 +3,7 @@
 import {
   Activity, BarChart3, Blocks, Bot, Boxes, Braces, ChevronDown,
   CircleDollarSign, Clock3, Database, GitBranch, LayoutDashboard,
-  ListFilter, Play, Plus, RefreshCw, RotateCcw, Search, Settings,
+  Ban, ListFilter, Play, Plus, RefreshCw, RotateCcw, Search, Settings,
   ShieldCheck, Workflow as WorkflowIcon, Wrench, X, Zap,
 } from "lucide-react";
 import {
@@ -93,6 +93,8 @@ export function RelayDashboard() {
   const [runInput, setRunInput] = useState(`{ "prompt": "Explain why durable agent execution matters." }`);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const selectedRun = runs.find((run) => run.id === selectedRunID) ?? null;
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     setConnection("loading");
@@ -144,6 +146,16 @@ export function RelayDashboard() {
     return () => controller.abort();
   }, [selectedRunID, connection]);
 
+  useEffect(() => {
+    if (!selectedRunID || !selectedRun || ["succeeded", "failed", "cancelled"].includes(selectedRun.status)) return;
+    const stream = new EventSource(`/api/relay/runs/${selectedRunID}/stream`);
+    const eventTypes = ["run.started", "run.succeeded", "run.failed", "run.cancelled", "node.queued", "node.running", "node.succeeded", "node.failed", "node.retry_scheduled", "node.cancelled"];
+    const update = () => void refresh();
+    for (const eventType of eventTypes) stream.addEventListener(eventType, update);
+    stream.onerror = () => stream.close();
+    return () => stream.close();
+  }, [selectedRunID, selectedRun, refresh]);
+
   const openRunDialog = () => {
     setRunWorkflowID((current) => current || workflows[0]?.id || "");
     setMutationError(null);
@@ -185,12 +197,26 @@ export function RelayDashboard() {
     }
   };
 
-  const selectedRun = runs.find((run) => run.id === selectedRunID) ?? null;
+  const cancelSelectedRun = async () => {
+    if (!selectedRunID) return;
+    setMutationError(null);
+    try {
+      await relayPost(`/runs/${selectedRunID}/cancel`, {}, runSchema);
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to cancel run");
+    }
+  };
+
   const terminalRuns = runs.filter((run) => ["succeeded", "failed", "cancelled"].includes(run.status));
   const successRate = terminalRuns.length === 0 ? "—" : `${((terminalRuns.filter((run) => run.status === "succeeded").length / terminalRuns.length) * 100).toFixed(1)}%`;
   const retries = nodes.reduce((total, node) => total + Math.max(0, node.current_attempt_no - 1), 0);
   const tokenTotal = (usage?.totals.input_tokens ?? 0) + (usage?.totals.output_tokens ?? 0);
   const knownCost = usage?.totals.cost_microusd;
+  const visibleRuns = runs.filter((run) => {
+    const query = searchQuery.trim().toLowerCase();
+    return query === "" || run.id.toLowerCase().includes(query) || run.status.toLowerCase().includes(query) || run.workflow_version_id.toLowerCase().includes(query);
+  });
   const flowNodes = useMemo<ExecutionNode[]>(() => nodes.map((node) => ({
     id: node.id,
     type: "execution",
@@ -242,7 +268,7 @@ export function RelayDashboard() {
       <main className="workspace">
         <header className="topbar">
           <div><div className="title-row"><h1>Execution overview</h1><span className={`runtime-pill ${connection}`}><i />{connection === "live" ? "Live" : connection === "loading" ? "Connecting" : "Unavailable"}</span></div><p>Durable workflow orchestration and run intelligence</p></div>
-          <div className="topbar-actions"><label className="search-box"><Search size={15} /><input aria-label="Search runs" placeholder="Search runs" /></label><button className="icon-button" onClick={() => void refresh()} aria-label="Refresh"><RefreshCw size={17} /></button><button className="primary-action" onClick={openRunDialog} disabled={connection !== "live" || workflows.length === 0}><Play size={15} fill="currentColor" />New run</button></div>
+          <div className="topbar-actions"><label className="search-box"><Search size={15} /><input aria-label="Search runs" placeholder="Search runs" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /></label><button className="icon-button" onClick={() => void refresh()} aria-label="Refresh"><RefreshCw size={17} /></button><button className="primary-action" onClick={openRunDialog} disabled={connection !== "live" || workflows.length === 0}><Play size={15} fill="currentColor" />New run</button></div>
         </header>
 
         {error ? <div className="system-banner"><span><Database size={16} />{error}</span><button onClick={() => void refresh()}>Retry connection</button></div> : null}
@@ -257,7 +283,7 @@ export function RelayDashboard() {
         </section>
 
         <section className="graph-section">
-          <div className="section-bar"><div><span className="section-index">01</span><div><h2>Live execution graph</h2><p>{selectedRun ? `Run ${selectedRun.id.slice(0, 8)} · ${selectedRun.status}` : "Select a run to inspect its durable node state"}</p></div></div><div className="section-actions"><button><ListFilter size={15} />All nodes</button><button><GitBranch size={15} />Auto layout</button></div></div>
+          <div className="section-bar"><div><span className="section-index">01</span><div><h2>Live execution graph</h2><p>{selectedRun ? `Run ${selectedRun.id.slice(0, 8)} · ${selectedRun.status}` : "Select a run to inspect its durable node state"}</p></div></div><div className="section-actions"><button><ListFilter size={15} />All nodes</button><button><GitBranch size={15} />Auto layout</button>{selectedRun && ["pending", "running"].includes(selectedRun.status) ? <button className="danger-action" onClick={() => void cancelSelectedRun()}><Ban size={14} />Cancel run</button> : null}</div></div>
           <div className="graph-card">
             {flowNodes.length > 0 ? <ReactFlow nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes} fitView minZoom={0.45} maxZoom={1.8} nodesDraggable={false} nodesConnectable={false} proOptions={{ hideAttribution: true }}><Background color="#34354b" gap={24} size={1} /><Controls showInteractive={false} /><MiniMap nodeColor={(node) => statusColor[(node.data as ExecutionNodeData).node.status] ?? statusColor.pending} maskColor="rgba(8,9,15,.72)" /></ReactFlow> : <div className="graph-empty"><div><WorkflowIcon size={28} /></div><h3>{connection === "live" ? "No execution nodes yet" : "Connect the Relay backend"}</h3><p>{connection === "live" ? "Create a workflow and submit a run. Its durable node states will appear here in real time." : "Start the API, control plane, worker, PostgreSQL, and NATS stack to populate this console with real execution data."}</p><button className="primary-action" onClick={() => { setMutationError(null); setDialog("workflow"); }} disabled={connection !== "live"}><WorkflowIcon size={15} />Create workflow</button></div>}
             <div className="graph-legend">{["running", "succeeded", "failed", "queued"].map((status) => <span key={status}><i style={{ background: statusColor[status] }} />{status}</span>)}</div>
@@ -267,7 +293,7 @@ export function RelayDashboard() {
         <section className="lower-grid">
           <div className="panel run-panel">
             <div className="panel-heading"><div><span className="section-index">02</span><h2>Recent runs</h2></div><button>View all <ChevronDown size={14} /></button></div>
-            <div className="run-table" role="table" aria-label="Recent workflow runs"><div className="run-row run-header" role="row"><span>Run</span><span>Status</span><span>Created</span><span>Duration</span></div>{runs.length === 0 ? <div className="table-empty">No runs have been submitted.</div> : runs.slice(0, 7).map((run) => <button className={`run-row ${run.id === selectedRunID ? "selected" : ""}`} key={run.id} onClick={() => setSelectedRunID(run.id)} role="row"><span><code>{run.id.slice(0, 8)}</code><small>{run.workflow_version_id.slice(0, 8)}</small></span><span><i className={`status-dot ${run.status}`} />{run.status}</span><span>{new Date(run.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span><span>{formatDuration(run)}</span></button>)}</div>
+            <div className="run-table" role="table" aria-label="Recent workflow runs"><div className="run-row run-header" role="row"><span>Run</span><span>Status</span><span>Created</span><span>Duration</span></div>{visibleRuns.length === 0 ? <div className="table-empty">{runs.length === 0 ? "No runs have been submitted." : "No runs match this search."}</div> : visibleRuns.slice(0, 7).map((run) => <button className={`run-row ${run.id === selectedRunID ? "selected" : ""}`} key={run.id} onClick={() => setSelectedRunID(run.id)} role="row"><span><code>{run.id.slice(0, 8)}</code><small>{run.workflow_version_id.slice(0, 8)}</small></span><span><i className={`status-dot ${run.status}`} />{run.status}</span><span>{new Date(run.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span><span>{formatDuration(run)}</span></button>)}</div>
           </div>
           <div className="panel event-panel">
             <div className="panel-heading"><div><span className="section-index">03</span><h2>Event stream</h2></div><span className="event-count">{events.length} events</span></div>

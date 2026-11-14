@@ -85,6 +85,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--purple); ou
 .section-bar p { margin: 4px 0 0; color: var(--faint); font-size: 10px; }
 .section-actions { display: flex; gap: 7px; }
 .section-actions button { height: 31px; padding: 0 10px; font-size: 10px; }
+.section-actions button.danger-action { color: #ff9bab; border-color: rgba(251,113,133,.25); background: rgba(251,113,133,.07); }
 .graph-card { position: relative; height: 480px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(rgba(18,19,31,.72), rgba(18,19,31,.92)), radial-gradient(circle at 50% 45%, rgba(84,68,194,.11), transparent 38%); box-shadow: inset 0 1px rgba(255,255,255,.025); }
 .react-flow__renderer { cursor: default; }
 .react-flow__controls { overflow: hidden; border: 1px solid var(--line) !important; border-radius: 8px; box-shadow: none !important; }
