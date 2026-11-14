@@ -51,7 +51,7 @@ func run() error {
 	defer ticker.Stop()
 	slog.Info("control plane started", "poll_interval", cfg.ControlPollInterval)
 	for {
-		if err := runPass(ctx, database, broker, cfg.GlobalConcurrency, cfg.RunConcurrency); err != nil {
+		if err := runPass(ctx, database, broker, cfg.GlobalConcurrency, cfg.RunConcurrency, cfg.WorkerMaxRetries); err != nil {
 			slog.Error("control plane pass failed", "error", err)
 		}
 		select {
@@ -62,7 +62,14 @@ func run() error {
 	}
 }
 
-func runPass(ctx context.Context, database *store.Store, broker *dispatcher.NATS, globalConcurrency, runConcurrency int32) error {
+func runPass(ctx context.Context, database *store.Store, broker *dispatcher.NATS, globalConcurrency, runConcurrency int32, maxRetries int) error {
+	recovered, err := database.RecoverExpiredAttempts(ctx, 100, maxRetries)
+	if err != nil {
+		return err
+	}
+	if recovered > 0 {
+		slog.Info("expired attempts recovered", "count", recovered)
+	}
 	for scheduledCount := 0; scheduledCount < 32; scheduledCount++ {
 		scheduled, found, err := database.ScheduleOne(ctx, globalConcurrency, runConcurrency)
 		if err != nil {
