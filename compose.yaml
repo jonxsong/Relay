@@ -67,6 +67,7 @@ services:
       RELAY_RUN_CONCURRENCY: ${RELAY_RUN_CONCURRENCY:-10}
       RELAY_MAX_RETRIES: ${RELAY_MAX_RETRIES:-3}
       RELAY_WORKER_LEASE: ${RELAY_WORKER_LEASE:-45s}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     ports:
       - "8080:8080"
     depends_on:
@@ -117,6 +118,7 @@ services:
     restart: unless-stopped
     environment:
       RELAY_API_URL: http://api:8080/api/v1
+      RELAY_SESSION_SECRET: ${RELAY_SESSION_SECRET:-development-only-session-secret-change-me}
     ports:
       - "3000:3000"
     depends_on:

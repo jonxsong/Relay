@@ -15,6 +15,7 @@ import (
 	"github.com/jonxsong/Relay/internal/dispatcher"
 	relaymcp "github.com/jonxsong/Relay/internal/mcp"
 	"github.com/jonxsong/Relay/internal/store"
+	"github.com/jonxsong/Relay/internal/telemetry"
 	"github.com/jonxsong/Relay/internal/worker"
 )
 
@@ -33,6 +34,17 @@ func run() error {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	shutdownTracing, err := telemetry.ConfigureTracing(ctx, "relay-worker", cfg.Environment)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		shutdownContext, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+		if shutdownErr := shutdownTracing(shutdownContext); shutdownErr != nil {
+			slog.Warn("flush traces", "error", shutdownErr)
+		}
+	}()
 	startupContext, cancelStartup := context.WithTimeout(ctx, 10*time.Second)
 	defer cancelStartup()
 

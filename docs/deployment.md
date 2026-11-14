@@ -17,7 +17,10 @@ Create a deployment-only .env that is never committed:
 POSTGRES_PASSWORD=replace-with-a-random-database-password
 RELAY_ENV=production
 RELAY_API_KEY=replace-with-at-least-32-random-characters
+RELAY_SESSION_SECRET=replace-with-a-different-32-character-random-secret
 RELAY_PROVIDER=mock
+# Optional: an OpenTelemetry Collector OTLP/HTTP endpoint.
+OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318
 ~~~
 
 For live model execution, set the provider to OpenAI and mount the OpenAI key file. Prefer file-mounted platform secrets over environment variables.
@@ -51,7 +54,7 @@ relay.jonzhang.dev {
 }
 ~~~
 
-The Next.js route handler proxies API and SSE traffic to the private API service. It forwards an incoming bearer header but never bakes a Relay key into the browser bundle or container image.
+The Next.js route handler proxies API and SSE traffic to the private API service. The console exchanges the operator's Relay key for an eight-hour, same-site, HttpOnly cookie encrypted with `RELAY_SESSION_SECRET`; neither key is baked into the browser bundle or container image. Use distinct random values for `RELAY_API_KEY` and `RELAY_SESSION_SECRET`.
 
 ## Operations
 
@@ -60,6 +63,7 @@ The Next.js route handler proxies API and SSE traffic to the private API service
 - Scale workers horizontally; do not scale the database by copying its volume.
 - Drain workers with SIGTERM; leases and recovery handle interrupted attempts.
 - Monitor readiness, error rate, expired leases, retry count, queue delay, and database saturation.
+- Point `OTEL_EXPORTER_OTLP_ENDPOINT` at an OpenTelemetry Collector to export API, control-plane, and worker spans over OTLP/HTTP. Prometheus metrics remain available at `/metrics`.
 - Rotate Relay, OpenAI, and MCP keys independently.
 
 See [the threat model](threat-model.md), [architecture](architecture.md), and [OpenAPI contract](openapi.yaml).

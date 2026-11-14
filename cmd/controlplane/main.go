@@ -12,6 +12,10 @@ import (
 	"github.com/jonxsong/Relay/internal/config"
 	"github.com/jonxsong/Relay/internal/dispatcher"
 	"github.com/jonxsong/Relay/internal/store"
+	"github.com/jonxsong/Relay/internal/telemetry"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 func main() {
@@ -29,6 +33,17 @@ func run() error {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	shutdownTracing, err := telemetry.ConfigureTracing(ctx, "relay-controlplane", cfg.Environment)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		shutdownContext, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+		if shutdownErr := shutdownTracing(shutdownContext); shutdownErr != nil {
+			slog.Warn("flush traces", "error", shutdownErr)
+		}
+	}()
 	startupContext, cancelStartup := context.WithTimeout(ctx, 10*time.Second)
 	defer cancelStartup()
 
@@ -63,10 +78,15 @@ func run() error {
 }
 
 func runPass(ctx context.Context, database *store.Store, broker *dispatcher.NATS, globalConcurrency, runConcurrency int32, maxRetries int) error {
+	ctx, span := otel.Tracer("github.com/jonxsong/Relay/controlplane").Start(ctx, "controlplane.pass")
+	defer span.End()
 	recovered, err := database.RecoverExpiredAttempts(ctx, 100, maxRetries)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "recover expired attempts")
 		return err
 	}
+	span.SetAttributes(attribute.Int("relay.attempts.recovered", recovered))
 	if recovered > 0 {
 		slog.Info("expired attempts recovered", "count", recovered)
 	}
@@ -82,8 +102,11 @@ func runPass(ctx context.Context, database *store.Store, broker *dispatcher.NATS
 	}
 	published, err := database.DispatchOutbox(ctx, 100, broker.Publish)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "dispatch outbox")
 		return err
 	}
+	span.SetAttributes(attribute.Int("relay.outbox.published", published))
 	if published > 0 {
 		slog.Info("outbox dispatched", "published", published)
 	}

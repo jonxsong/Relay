@@ -20,6 +20,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jonxsong/Relay/internal/telemetry"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type ReadinessChecker interface {
@@ -70,7 +72,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	router.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed", nil)
 	})
-	return router
+	return otelhttp.NewHandler(router, "relay.api")
 }
 
 type requestWindow struct {
@@ -197,6 +199,7 @@ func requestLogger(next http.Handler) http.Handler {
 			"path", r.URL.Path,
 			"status", wrapper.Status(),
 			"duration_ms", time.Since(started).Milliseconds(),
+			"trace_id", trace.SpanContextFromContext(r.Context()).TraceID().String(),
 		)
 	})
 }

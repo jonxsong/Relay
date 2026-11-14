@@ -10,6 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jonxsong/Relay/internal/domain"
 	"github.com/jonxsong/Relay/internal/store"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 type AttemptRepository interface {
@@ -44,11 +47,26 @@ func New(repository AttemptRepository, executor Executor, workerID string, lease
 	return &Worker{repository: repository, executor: executor, workerID: workerID, lease: lease, maxRetries: maxRetries, nodeTimeout: 2 * time.Minute}, nil
 }
 
-func (w *Worker) Handle(ctx context.Context, attemptID uuid.UUID) error {
+func (w *Worker) Handle(ctx context.Context, attemptID uuid.UUID) (handleErr error) {
+	ctx, span := otel.Tracer("github.com/jonxsong/Relay/worker").Start(ctx, "worker.attempt")
+	span.SetAttributes(attribute.String("relay.attempt.id", attemptID.String()))
+	defer func() {
+		if handleErr != nil {
+			span.RecordError(handleErr)
+			span.SetStatus(codes.Error, "attempt failed")
+		}
+		span.End()
+	}()
 	claim, err := w.repository.ClaimAttempt(ctx, attemptID, w.workerID, w.lease)
 	if err != nil {
 		return err
 	}
+	span.SetAttributes(
+		attribute.String("relay.run.id", claim.RunID.String()),
+		attribute.String("relay.node.key", claim.NodeKey),
+		attribute.String("relay.node.type", claim.NodeType),
+		attribute.Int("relay.attempt.number", int(claim.AttemptNo)),
+	)
 	executionContext, cancelExecution := context.WithTimeout(ctx, w.nodeTimeout)
 	defer cancelExecution()
 	leaseErrors := make(chan error, 1)

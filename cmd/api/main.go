@@ -13,6 +13,7 @@ import (
 	"github.com/jonxsong/Relay/internal/config"
 	"github.com/jonxsong/Relay/internal/httpapi"
 	"github.com/jonxsong/Relay/internal/store"
+	"github.com/jonxsong/Relay/internal/telemetry"
 )
 
 func main() {
@@ -31,6 +32,17 @@ func run() error {
 
 	rootContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	shutdownTracing, err := telemetry.ConfigureTracing(rootContext, "relay-api", cfg.Environment)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		shutdownContext, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+		if shutdownErr := shutdownTracing(shutdownContext); shutdownErr != nil {
+			slog.Warn("flush traces", "error", shutdownErr)
+		}
+	}()
 	startupContext, cancelStartup := context.WithTimeout(rootContext, 10*time.Second)
 	defer cancelStartup()
 

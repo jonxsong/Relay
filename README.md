@@ -141,13 +141,14 @@ The full threat model and deployment hardening guide will be acceptance-gated be
 | --- | --- |
 | Architecture and ADRs | 🟢 Implemented |
 | Domain invariants | 🟢 Implemented and unit tested |
-| Durable scheduler and recovery | 🟡 Implemented; integration tests in progress |
+| Durable scheduler and recovery | 🟢 Implemented; vertical integration test passing |
 | OpenAI adapter | 🟢 Implemented and contract tested |
 | MCP adapter | 🟡 Allowlist, schema, approval, SSRF, and size gates implemented; live smoke test pending |
-| Developer console | 🟢 Live overview, DAG, events, usage, create and run actions |
-| Production authentication | 🟢 Constant-time bearer validation; user-facing access flow in progress |
+| Developer console | 🟢 Live overview, DAG, events, usage, create, run, and cancel actions |
+| Production authentication | 🟢 Constant-time bearer validation and encrypted HttpOnly console sessions |
+| Observability | 🟢 Prometheus metrics and optional OTLP/HTTP traces across all services |
 | OpenAPI 3.1 | 🟢 Published and linted |
-| Integration, browser, and load tests | ⚪ Planned |
+| Integration, browser, and load tests | 🟢 Passing; factual local benchmark results published |
 
 ## Contributing
 
