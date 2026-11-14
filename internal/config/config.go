@@ -28,6 +28,7 @@ type Config struct {
 	DefaultModel        string
 	MaxOutputTokens     int64
 	ModelTimeout        time.Duration
+	MCPConfigFile       string
 }
 
 func Load() (Config, error) {
@@ -86,6 +87,7 @@ func Load() (Config, error) {
 		DefaultModel:        stringEnv("RELAY_DEFAULT_MODEL", "gpt-5-mini"),
 		MaxOutputTokens:     maxOutputTokens,
 		ModelTimeout:        modelTimeout,
+		MCPConfigFile:       stringEnv("RELAY_MCP_CONFIG_FILE", ""),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")

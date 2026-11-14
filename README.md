@@ -12,7 +12,7 @@
 </div>
 
 > [!IMPORTANT]
-> Relay is under active construction. The durable backend vertical slice is runnable with the deterministic mock provider; the developer console, production authentication, and full integration suite are still being built. Do not deploy it to production until the security and recovery acceptance suites are green.
+> Relay is under active construction. The durable backend vertical slice, OpenAI adapter, and guarded MCP boundary are runnable; the developer console, production authentication, and full integration suite are still being built. Do not deploy it to production until the security and recovery acceptance suites are green.
 
 Relay turns an immutable workflow definition into a durable, inspectable run. PostgreSQL owns the truth. NATS JetStream wakes workers up. Every claim is fenced, every retry is bounded, and every user-visible state change is recorded as a replayable event.
 
@@ -40,7 +40,7 @@ The diagram is the canonical system map used across Relay's documentation and bu
 
 ## Five-minute quickstart
 
-The complete Compose quickstart will land with the first runnable vertical slice. Its stable contract is:
+Start the backend stack with:
 
 ```bash
 cp .env.example .env
@@ -53,7 +53,7 @@ Then verify the API:
 curl http://localhost:8080/api/v1/health/ready
 ```
 
-The deterministic mock model is the default. The browser console and opt-in live OpenAI provider are still in progress and are not required for local execution.
+The deterministic mock model is the default. To opt into OpenAI, set `RELAY_PROVIDER=openai` and provide `OPENAI_API_KEY` or mount a secret file through `OPENAI_API_KEY_FILE`. Tool nodes remain fail-closed unless `RELAY_MCP_CONFIG_FILE` points to an explicit connection and tool allowlist; use [`config/mcp.example.json`](config/mcp.example.json) as the schema. Secrets are referenced by environment-variable name and are never stored in workflow JSON.
 
 ## The execution contract
 
@@ -128,7 +128,8 @@ The full threat model and deployment hardening guide will be acceptance-gated be
 | Architecture and ADRs | 🟢 Implemented |
 | Domain invariants | 🟢 Implemented and unit tested |
 | Durable scheduler and recovery | 🟡 Implemented; integration tests in progress |
-| OpenAI and MCP adapters | ⚪ Planned |
+| OpenAI adapter | 🟢 Implemented and contract tested |
+| MCP adapter | 🟡 Allowlist, schema, approval, SSRF, and size gates implemented; live smoke test pending |
 | Developer console | ⚪ Planned |
 | Integration, browser, and load tests | ⚪ Planned |
 

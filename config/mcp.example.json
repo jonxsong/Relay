@@ -1,0 +1,17 @@
+{
+  "connections": [
+    {
+      "name": "example",
+      "endpoint": "https://mcp.example.com/mcp",
+      "allowed_tools": {
+        "search": { "requires_approval": false },
+        "create_record": { "requires_approval": true }
+      },
+      "header_env": {
+        "Authorization": "EXAMPLE_MCP_AUTHORIZATION"
+      },
+      "timeout": "30s",
+      "max_result_bytes": 1048576
+    }
+  ]
+}

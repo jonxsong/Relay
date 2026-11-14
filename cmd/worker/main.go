@@ -13,6 +13,7 @@ import (
 	"github.com/jonxsong/Relay/internal/ai"
 	"github.com/jonxsong/Relay/internal/config"
 	"github.com/jonxsong/Relay/internal/dispatcher"
+	relaymcp "github.com/jonxsong/Relay/internal/mcp"
 	"github.com/jonxsong/Relay/internal/store"
 	"github.com/jonxsong/Relay/internal/worker"
 )
@@ -46,14 +47,27 @@ func run() error {
 	}
 	workerID := fmt.Sprintf("%s-%d", hostname, os.Getpid())
 	localExecutor := worker.DeterministicMock{}
-	var executor worker.Executor = localExecutor
+	var llmExecutor worker.Executor = localExecutor
 	if cfg.Provider == "openai" {
 		openAIExecutor, openAIErr := ai.NewOpenAI(cfg.OpenAIAPIKey, cfg.DefaultModel, cfg.MaxOutputTokens, cfg.ModelTimeout)
 		if openAIErr != nil {
 			return openAIErr
 		}
-		executor = worker.Router{LLM: openAIExecutor, Local: localExecutor}
+		llmExecutor = openAIExecutor
 	}
+	var toolExecutor worker.Executor
+	if cfg.MCPConfigFile != "" {
+		connections, configErr := relaymcp.LoadConfig(cfg.MCPConfigFile)
+		if configErr != nil {
+			return configErr
+		}
+		configuredExecutor, configErr := relaymcp.NewExecutor(connections, nil)
+		if configErr != nil {
+			return configErr
+		}
+		toolExecutor = configuredExecutor
+	}
+	executor := worker.Router{LLM: llmExecutor, Local: localExecutor, Tool: toolExecutor}
 	processor, err := worker.New(database, executor, workerID, cfg.WorkerLeaseDuration, cfg.WorkerMaxRetries)
 	if err != nil {
 		return err
