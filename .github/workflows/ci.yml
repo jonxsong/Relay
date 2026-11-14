@@ -107,3 +107,61 @@ jobs:
       - run: pnpm lint
       - run: pnpm build
 
+  integration:
+    name: PostgreSQL and NATS vertical slice
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: relay
+          POSTGRES_USER: relay
+          POSTGRES_PASSWORD: relay-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U relay -d relay"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://relay:relay-ci@localhost:5432/relay?sslmode=disable
+      NATS_URL: nats://localhost:4222
+      RELAY_PROVIDER: mock
+      RELAY_INTEGRATION_BASE_URL: http://127.0.0.1:8080/api/v1
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Start NATS JetStream
+        run: |
+          docker run --detach --network host --name relay-nats nats:2.11-alpine --jetstream --http_port=8222
+          for attempt in $(seq 1 40); do
+            curl --fail --silent http://127.0.0.1:8222/healthz && exit 0
+            sleep 0.25
+          done
+          docker logs relay-nats
+          exit 1
+      - run: go tool goose -dir migrations postgres "$DATABASE_URL" up
+      - name: Build services
+        run: |
+          go build -o "$RUNNER_TEMP/relay-api" ./cmd/api
+          go build -o "$RUNNER_TEMP/relay-controlplane" ./cmd/controlplane
+          go build -o "$RUNNER_TEMP/relay-worker" ./cmd/worker
+      - name: Start services
+        run: |
+          "$RUNNER_TEMP/relay-api" >"$RUNNER_TEMP/api.log" 2>&1 &
+          "$RUNNER_TEMP/relay-controlplane" >"$RUNNER_TEMP/controlplane.log" 2>&1 &
+          "$RUNNER_TEMP/relay-worker" >"$RUNNER_TEMP/worker.log" 2>&1 &
+          for attempt in $(seq 1 40); do
+            curl --fail --silent http://127.0.0.1:8080/api/v1/health/ready && exit 0
+            sleep 0.25
+          done
+          cat "$RUNNER_TEMP/api.log"
+          exit 1
+      - name: Exercise durable execution
+        run: go test -tags=integration -count=1 -v ./integration
+
