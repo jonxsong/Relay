@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jonxsong/Relay/internal/ai"
 	"github.com/jonxsong/Relay/internal/config"
 	"github.com/jonxsong/Relay/internal/dispatcher"
 	"github.com/jonxsong/Relay/internal/store"
@@ -44,7 +45,16 @@ func run() error {
 		hostname = "unknown-host"
 	}
 	workerID := fmt.Sprintf("%s-%d", hostname, os.Getpid())
-	processor, err := worker.New(database, worker.DeterministicMock{}, workerID, cfg.WorkerLeaseDuration, cfg.WorkerMaxRetries)
+	localExecutor := worker.DeterministicMock{}
+	var executor worker.Executor = localExecutor
+	if cfg.Provider == "openai" {
+		openAIExecutor, openAIErr := ai.NewOpenAI(cfg.OpenAIAPIKey, cfg.DefaultModel, cfg.MaxOutputTokens, cfg.ModelTimeout)
+		if openAIErr != nil {
+			return openAIErr
+		}
+		executor = worker.Router{LLM: openAIExecutor, Local: localExecutor}
+	}
+	processor, err := worker.New(database, executor, workerID, cfg.WorkerLeaseDuration, cfg.WorkerMaxRetries)
 	if err != nil {
 		return err
 	}

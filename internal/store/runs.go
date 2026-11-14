@@ -206,6 +206,17 @@ func (s *Store) ReplayEvents(ctx context.Context, ownerID, runID uuid.UUID, afte
 	return events, nil
 }
 
+func (s *Store) ListRunUsage(ctx context.Context, ownerID, runID uuid.UUID) ([]db.UsageRecord, error) {
+	if _, err := s.GetRun(ctx, ownerID, runID); err != nil {
+		return nil, err
+	}
+	records, err := s.queries.ListRunUsage(ctx, db.ListRunUsageParams{RunID: runID, OwnerID: ownerID})
+	if err != nil {
+		return nil, fmt.Errorf("list run usage: %w", err)
+	}
+	return records, nil
+}
+
 func (s *Store) CancelRun(ctx context.Context, ownerID, runID uuid.UUID) (db.WorkflowRun, error) {
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {

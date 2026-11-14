@@ -40,6 +40,9 @@ func (fakeRuns) ListRunNodes(context.Context, uuid.UUID, uuid.UUID) ([]db.NodeRu
 func (fakeRuns) ReplayEvents(context.Context, uuid.UUID, uuid.UUID, int64, int32) ([]db.ExecutionEvent, error) {
 	return []db.ExecutionEvent{}, nil
 }
+func (fakeRuns) ListRunUsage(context.Context, uuid.UUID, uuid.UUID) ([]db.UsageRecord, error) {
+	return []db.UsageRecord{}, nil
+}
 func (fakeRuns) CancelRun(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowRun, error) {
 	return db.WorkflowRun{}, store.ErrNotFound
 }

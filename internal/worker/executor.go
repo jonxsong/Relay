@@ -7,10 +7,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/jonxsong/Relay/internal/domain"
 )
 
 type Executor interface {
-	Execute(context.Context, string, json.RawMessage) (json.RawMessage, error)
+	Execute(context.Context, string, json.RawMessage) (ExecutionResult, error)
+}
+
+type ExecutionResult struct {
+	Output json.RawMessage
+	Usage  *domain.Usage
 }
 
 type ExecutionError struct {
@@ -29,28 +36,34 @@ func (e *ExecutionError) Unwrap() error {
 
 type DeterministicMock struct{}
 
-func (DeterministicMock) Execute(ctx context.Context, nodeType string, input json.RawMessage) (json.RawMessage, error) {
+func (DeterministicMock) Execute(ctx context.Context, nodeType string, input json.RawMessage) (ExecutionResult, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, &ExecutionError{Code: "cancelled", Retryable: true, Err: err}
+		return ExecutionResult{}, &ExecutionError{Code: "cancelled", Retryable: true, Err: err}
 	}
 	var value map[string]any
 	if err := json.Unmarshal(input, &value); err != nil {
-		return nil, &ExecutionError{Code: "invalid_input", Err: fmt.Errorf("decode node input: %w", err)}
+		return ExecutionResult{}, &ExecutionError{Code: "invalid_input", Err: fmt.Errorf("decode node input: %w", err)}
 	}
 	switch nodeType {
 	case "transform":
-		return json.Marshal(map[string]any{"value": value, "provider": "mock"})
+		output, err := json.Marshal(map[string]any{"value": value, "provider": "mock"})
+		return ExecutionResult{Output: output}, err
 	case "join":
-		return json.Marshal(map[string]any{"joined": value, "provider": "mock"})
+		output, err := json.Marshal(map[string]any{"joined": value, "provider": "mock"})
+		return ExecutionResult{Output: output}, err
 	case "llm":
 		hash := sha256.Sum256(input)
-		return json.Marshal(map[string]any{
+		output, err := json.Marshal(map[string]any{
 			"text":  "deterministic mock response " + hex.EncodeToString(hash[:6]),
 			"model": "relay-mock-v1",
 		})
+		zero := int64(0)
+		return ExecutionResult{Output: output, Usage: &domain.Usage{
+			Provider: "mock", Model: "relay-mock-v1", InputTokens: &zero, OutputTokens: &zero, CostMicrousd: &zero,
+		}}, err
 	case "tool":
-		return nil, &ExecutionError{Code: "tool_not_configured", Err: errors.New("tool execution requires an allowlisted MCP connection")}
+		return ExecutionResult{}, &ExecutionError{Code: "tool_not_configured", Err: errors.New("tool execution requires an allowlisted MCP connection")}
 	default:
-		return nil, &ExecutionError{Code: "unknown_node_type", Err: fmt.Errorf("unknown node type %q", nodeType)}
+		return ExecutionResult{}, &ExecutionError{Code: "unknown_node_type", Err: fmt.Errorf("unknown node type %q", nodeType)}
 	}
 }

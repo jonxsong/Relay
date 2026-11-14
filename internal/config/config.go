@@ -24,6 +24,10 @@ type Config struct {
 	WorkerLeaseDuration time.Duration
 	WorkerMaxRetries    int
 	Provider            string
+	OpenAIAPIKey        string
+	DefaultModel        string
+	MaxOutputTokens     int64
+	ModelTimeout        time.Duration
 }
 
 func Load() (Config, error) {
@@ -55,6 +59,14 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	maxOutputTokens, err := int64Env("RELAY_MAX_OUTPUT_TOKENS", 2048)
+	if err != nil {
+		return Config{}, err
+	}
+	modelTimeout, err := durationEnv("RELAY_MODEL_TIMEOUT", 90*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		Environment:         stringEnv("RELAY_ENV", "development"),
@@ -71,6 +83,9 @@ func Load() (Config, error) {
 		WorkerLeaseDuration: workerLeaseDuration,
 		WorkerMaxRetries:    int(workerMaxRetries),
 		Provider:            stringEnv("RELAY_PROVIDER", "mock"),
+		DefaultModel:        stringEnv("RELAY_DEFAULT_MODEL", "gpt-5-mini"),
+		MaxOutputTokens:     maxOutputTokens,
+		ModelTimeout:        modelTimeout,
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")
@@ -96,13 +111,48 @@ func Load() (Config, error) {
 	if cfg.WorkerMaxRetries < 0 || cfg.WorkerMaxRetries > 100 {
 		return Config{}, errors.New("RELAY_MAX_RETRIES must be between 0 and 100")
 	}
-	if cfg.Provider != "mock" {
-		return Config{}, errors.New("only the deterministic mock provider is currently enabled")
+	if cfg.Provider != "mock" && cfg.Provider != "openai" {
+		return Config{}, errors.New("RELAY_PROVIDER must be mock or openai")
+	}
+	if cfg.MaxOutputTokens < 1 || cfg.MaxOutputTokens > 100000 {
+		return Config{}, errors.New("RELAY_MAX_OUTPUT_TOKENS must be between 1 and 100000")
+	}
+	if cfg.ModelTimeout < time.Second || cfg.ModelTimeout > 10*time.Minute {
+		return Config{}, errors.New("RELAY_MODEL_TIMEOUT must be between 1s and 10m")
+	}
+	if cfg.Provider == "openai" {
+		apiKey, err := loadOpenAIAPIKey(cfg.Environment)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.OpenAIAPIKey = apiKey
 	}
 	if cfg.Environment != "development" {
 		return Config{}, errors.New("only development authentication is implemented; refusing to start a non-development environment")
 	}
 	return cfg, nil
+}
+
+func loadOpenAIAPIKey(environment string) (string, error) {
+	if key := strings.TrimSpace(os.Getenv("OPENAI_API_KEY")); key != "" {
+		return key, nil
+	}
+	path := strings.TrimSpace(os.Getenv("OPENAI_API_KEY_FILE"))
+	if path == "" && environment == "development" {
+		path = "OPENAI_API_KEY.txt"
+	}
+	if path == "" {
+		return "", errors.New("OPENAI_API_KEY or OPENAI_API_KEY_FILE is required for the OpenAI provider")
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read OpenAI API key file: %w", err)
+	}
+	key := strings.TrimSpace(string(contents))
+	if key == "" || strings.ContainsAny(key, "\r\n") {
+		return "", errors.New("OpenAI API key file must contain exactly one non-empty line")
+	}
+	return key, nil
 }
 
 func stringEnv(name, fallback string) string {

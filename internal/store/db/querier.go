@@ -28,6 +28,7 @@ type Querier interface {
 	CountNonTerminalNodes(ctx context.Context, runID uuid.UUID) (int32, error)
 	CreateNodeRun(ctx context.Context, arg CreateNodeRunParams) (NodeRun, error)
 	CreateOutboxEvent(ctx context.Context, arg CreateOutboxEventParams) (OutboxEvent, error)
+	CreateUsageRecord(ctx context.Context, arg CreateUsageRecordParams) (UsageRecord, error)
 	CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) (Workflow, error)
 	CreateWorkflowRun(ctx context.Context, arg CreateWorkflowRunParams) (WorkflowRun, error)
 	CreateWorkflowVersion(ctx context.Context, arg CreateWorkflowVersionParams) (WorkflowVersion, error)

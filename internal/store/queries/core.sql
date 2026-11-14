@@ -164,6 +164,31 @@ WHERE ur.run_id = sqlc.arg(run_id)
   AND wr.owner_id = sqlc.arg(owner_id)
 ORDER BY ur.recorded_at, ur.id;
 
+-- name: CreateUsageRecord :one
+INSERT INTO usage_records (
+    run_id,
+    node_attempt_id,
+    provider,
+    model,
+    pricing_version,
+    input_tokens,
+    output_tokens,
+    cost_microusd,
+    metadata
+)
+VALUES (
+    sqlc.arg(run_id),
+    sqlc.arg(node_attempt_id),
+    sqlc.arg(provider),
+    sqlc.arg(model),
+    sqlc.narg(pricing_version),
+    sqlc.narg(input_tokens),
+    sqlc.narg(output_tokens),
+    sqlc.narg(cost_microusd),
+    sqlc.arg(metadata)
+)
+RETURNING *;
+
 -- name: RequestRunCancellation :one
 UPDATE workflow_runs
 SET status = 'cancelled',

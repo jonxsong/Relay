@@ -19,8 +19,8 @@ func TestDeterministicMockIsStable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if string(first) != string(second) {
-		t.Fatalf("mock output differs: %s != %s", first, second)
+	if string(first.Output) != string(second.Output) {
+		t.Fatalf("mock output differs: %s != %s", first.Output, second.Output)
 	}
 }
 

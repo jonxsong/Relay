@@ -24,6 +24,7 @@ type RunRepository interface {
 	ListRuns(context.Context, uuid.UUID, *string, int32) ([]db.WorkflowRun, error)
 	ListRunNodes(context.Context, uuid.UUID, uuid.UUID) ([]db.NodeRun, error)
 	ReplayEvents(context.Context, uuid.UUID, uuid.UUID, int64, int32) ([]db.ExecutionEvent, error)
+	ListRunUsage(context.Context, uuid.UUID, uuid.UUID) ([]db.UsageRecord, error)
 	CancelRun(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowRun, error)
 }
 
@@ -67,6 +68,18 @@ type eventResponse struct {
 	OccurredAt time.Time       `json:"occurred_at"`
 }
 
+type usageResponse struct {
+	ID             uuid.UUID  `json:"id"`
+	NodeAttemptID  *uuid.UUID `json:"node_attempt_id,omitempty"`
+	Provider       string     `json:"provider"`
+	Model          string     `json:"model"`
+	PricingVersion *string    `json:"pricing_version,omitempty"`
+	InputTokens    *int64     `json:"input_tokens,omitempty"`
+	OutputTokens   *int64     `json:"output_tokens,omitempty"`
+	CostMicrousd   *int64     `json:"cost_microusd,omitempty"`
+	RecordedAt     time.Time  `json:"recorded_at"`
+}
+
 func mountRunRoutes(router chi.Router, repository RunRepository) {
 	router.Post("/workflows/{workflowID}/runs", submitRunHandler(repository))
 	router.Route("/runs", func(runs chi.Router) {
@@ -75,10 +88,54 @@ func mountRunRoutes(router chi.Router, repository RunRepository) {
 			run.Get("/", getRunHandler(repository))
 			run.Get("/nodes", listRunNodesHandler(repository))
 			run.Get("/events", replayEventsHandler(repository))
+			run.Get("/usage", runUsageHandler(repository))
 			run.Get("/stream", streamEventsHandler(repository))
 			run.Post("/cancel", cancelRunHandler(repository))
 		})
 	})
+}
+
+func runUsageHandler(repository RunRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID, runID, ok := runRouteIDs(w, r)
+		if !ok {
+			return
+		}
+		records, err := repository.ListRunUsage(r.Context(), ownerID, runID)
+		if err != nil {
+			writeRunRepositoryError(w, r, err)
+			return
+		}
+		items := make([]usageResponse, 0, len(records))
+		var inputTokens, outputTokens, knownCost int64
+		costKnown := true
+		for _, record := range records {
+			items = append(items, usageResponse{
+				ID: record.ID, NodeAttemptID: uuidFromPG(record.NodeAttemptID), Provider: record.Provider, Model: record.Model,
+				PricingVersion: record.PricingVersion, InputTokens: record.InputTokens, OutputTokens: record.OutputTokens,
+				CostMicrousd: record.CostMicrousd, RecordedAt: timeFromTimestamptz(record.RecordedAt),
+			})
+			if record.InputTokens != nil {
+				inputTokens += *record.InputTokens
+			}
+			if record.OutputTokens != nil {
+				outputTokens += *record.OutputTokens
+			}
+			if record.CostMicrousd == nil {
+				costKnown = false
+			} else {
+				knownCost += *record.CostMicrousd
+			}
+		}
+		var totalCost *int64
+		if costKnown {
+			totalCost = &knownCost
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"items":  items,
+			"totals": map[string]any{"input_tokens": inputTokens, "output_tokens": outputTokens, "cost_microusd": totalCost},
+		})
+	}
 }
 
 func streamEventsHandler(repository RunRepository) http.HandlerFunc {

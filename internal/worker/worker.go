@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jonxsong/Relay/internal/domain"
 	"github.com/jonxsong/Relay/internal/store"
 )
 
 type AttemptRepository interface {
 	ClaimAttempt(context.Context, uuid.UUID, string, time.Duration) (store.AttemptClaim, error)
 	RenewLease(context.Context, store.AttemptClaim, time.Duration) error
-	CompleteAttemptSuccess(context.Context, store.AttemptClaim, json.RawMessage) error
+	CompleteAttemptSuccess(context.Context, store.AttemptClaim, json.RawMessage, *domain.Usage) error
 	CompleteAttemptFailure(context.Context, store.AttemptClaim, string, string, bool, int) error
 }
 
@@ -54,7 +55,7 @@ func (w *Worker) Handle(ctx context.Context, attemptID uuid.UUID) error {
 	stopRenewal := make(chan struct{})
 	go w.renewLease(executionContext, claim, stopRenewal, leaseErrors, cancelExecution)
 
-	output, executionErr := w.executor.Execute(executionContext, claim.NodeType, claim.Input)
+	result, executionErr := w.executor.Execute(executionContext, claim.NodeType, claim.Input)
 	close(stopRenewal)
 	select {
 	case leaseErr := <-leaseErrors:
@@ -64,7 +65,7 @@ func (w *Worker) Handle(ctx context.Context, attemptID uuid.UUID) error {
 	default:
 	}
 	if executionErr == nil {
-		return w.repository.CompleteAttemptSuccess(ctx, claim, output)
+		return w.repository.CompleteAttemptSuccess(ctx, claim, result.Output, result.Usage)
 	}
 	code := "execution_failed"
 	retryable := false

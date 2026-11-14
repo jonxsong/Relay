@@ -483,6 +483,73 @@ func (q *Queries) CreateOutboxEvent(ctx context.Context, arg CreateOutboxEventPa
 	return i, err
 }
 
+const createUsageRecord = `-- name: CreateUsageRecord :one
+INSERT INTO usage_records (
+    run_id,
+    node_attempt_id,
+    provider,
+    model,
+    pricing_version,
+    input_tokens,
+    output_tokens,
+    cost_microusd,
+    metadata
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9
+)
+RETURNING id, run_id, node_attempt_id, provider, model, pricing_version, input_tokens, output_tokens, cost_microusd, metadata, recorded_at
+`
+
+type CreateUsageRecordParams struct {
+	RunID          uuid.UUID   `json:"run_id"`
+	NodeAttemptID  pgtype.UUID `json:"node_attempt_id"`
+	Provider       string      `json:"provider"`
+	Model          string      `json:"model"`
+	PricingVersion *string     `json:"pricing_version"`
+	InputTokens    *int64      `json:"input_tokens"`
+	OutputTokens   *int64      `json:"output_tokens"`
+	CostMicrousd   *int64      `json:"cost_microusd"`
+	Metadata       []byte      `json:"metadata"`
+}
+
+func (q *Queries) CreateUsageRecord(ctx context.Context, arg CreateUsageRecordParams) (UsageRecord, error) {
+	row := q.db.QueryRow(ctx, createUsageRecord,
+		arg.RunID,
+		arg.NodeAttemptID,
+		arg.Provider,
+		arg.Model,
+		arg.PricingVersion,
+		arg.InputTokens,
+		arg.OutputTokens,
+		arg.CostMicrousd,
+		arg.Metadata,
+	)
+	var i UsageRecord
+	err := row.Scan(
+		&i.ID,
+		&i.RunID,
+		&i.NodeAttemptID,
+		&i.Provider,
+		&i.Model,
+		&i.PricingVersion,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CostMicrousd,
+		&i.Metadata,
+		&i.RecordedAt,
+	)
+	return i, err
+}
+
 const createWorkflow = `-- name: CreateWorkflow :one
 INSERT INTO workflows (owner_id, name, description)
 VALUES ($1, $2, $3)

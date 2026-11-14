@@ -93,7 +93,7 @@ func (s *Store) RenewLease(ctx context.Context, claim AttemptClaim, leaseDuratio
 	return nil
 }
 
-func (s *Store) CompleteAttemptSuccess(ctx context.Context, claim AttemptClaim, output json.RawMessage) error {
+func (s *Store) CompleteAttemptSuccess(ctx context.Context, claim AttemptClaim, output json.RawMessage, usage *domain.Usage) error {
 	if len(output) == 0 || !json.Valid(output) {
 		return errors.New("node output must be valid JSON")
 	}
@@ -135,6 +135,19 @@ func (s *Store) CompleteAttemptSuccess(ctx context.Context, claim AttemptClaim, 
 	}
 	if rows != 1 {
 		return ErrStaleClaim
+	}
+	if usage != nil {
+		if usage.Provider == "" || usage.Model == "" {
+			return errors.New("usage provider and model are required")
+		}
+		if _, err := q.CreateUsageRecord(ctx, db.CreateUsageRecordParams{
+			RunID: claim.RunID, NodeAttemptID: pgtype.UUID{Bytes: claim.AttemptID, Valid: true},
+			Provider: usage.Provider, Model: usage.Model, PricingVersion: usage.PricingVersion,
+			InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens, CostMicrousd: usage.CostMicrousd,
+			Metadata: json.RawMessage(`{}`),
+		}); err != nil {
+			return fmt.Errorf("record attempt usage: %w", err)
+		}
 	}
 	if err := unlockDependants(ctx, q, claim); err != nil {
 		return err

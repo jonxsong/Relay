@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jonxsong/Relay/internal/domain"
 	"github.com/jonxsong/Relay/internal/store"
 )
 
@@ -25,7 +26,7 @@ func (f *fakeAttemptRepository) ClaimAttempt(context.Context, uuid.UUID, string,
 func (*fakeAttemptRepository) RenewLease(context.Context, store.AttemptClaim, time.Duration) error {
 	return nil
 }
-func (f *fakeAttemptRepository) CompleteAttemptSuccess(_ context.Context, _ store.AttemptClaim, output json.RawMessage) error {
+func (f *fakeAttemptRepository) CompleteAttemptSuccess(_ context.Context, _ store.AttemptClaim, output json.RawMessage, _ *domain.Usage) error {
 	if !json.Valid(output) {
 		return errors.New("invalid output")
 	}
