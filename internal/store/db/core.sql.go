@@ -81,13 +81,63 @@ func (q *Queries) AppendExecutionEvent(ctx context.Context, arg AppendExecutionE
 	return i, err
 }
 
+const cancelActiveAttemptsForRun = `-- name: CancelActiveAttemptsForRun :many
+UPDATE node_attempts
+SET status = 'cancelled',
+    retryable = false,
+    error_code = 'run_cancelled',
+    error_message = 'run was cancelled while the node was executing',
+    completed_at = now(),
+    lease_expires_at = NULL
+WHERE node_run_id IN (SELECT id FROM node_runs WHERE run_id = $1)
+  AND status IN ('queued', 'running')
+RETURNING id, node_run_id, attempt_no, status, worker_id, fencing_token, lease_expires_at, last_heartbeat_at, input, output, error_code, error_message, retryable, queued_at, started_at, completed_at
+`
+
+func (q *Queries) CancelActiveAttemptsForRun(ctx context.Context, runID uuid.UUID) ([]NodeAttempt, error) {
+	rows, err := q.db.Query(ctx, cancelActiveAttemptsForRun, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []NodeAttempt{}
+	for rows.Next() {
+		var i NodeAttempt
+		if err := rows.Scan(
+			&i.ID,
+			&i.NodeRunID,
+			&i.AttemptNo,
+			&i.Status,
+			&i.WorkerID,
+			&i.FencingToken,
+			&i.LeaseExpiresAt,
+			&i.LastHeartbeatAt,
+			&i.Input,
+			&i.Output,
+			&i.ErrorCode,
+			&i.ErrorMessage,
+			&i.Retryable,
+			&i.QueuedAt,
+			&i.StartedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const cancelInactiveNodes = `-- name: CancelInactiveNodes :execrows
 UPDATE node_runs
 SET status = 'cancelled',
     completed_at = now(),
     updated_at = now()
 WHERE run_id = $1
-  AND status IN ('pending', 'ready', 'queued')
+  AND status IN ('pending', 'ready', 'queued', 'running')
 `
 
 func (q *Queries) CancelInactiveNodes(ctx context.Context, runID uuid.UUID) (int64, error) {
@@ -1726,6 +1776,16 @@ WHERE node_attempts.id = $2
   AND fencing_token = $3
   AND worker_id = $4
   AND lease_expires_at > now()
+  AND EXISTS (
+      SELECT 1
+      FROM node_runs nr
+      JOIN workflow_runs wr ON wr.id = nr.run_id
+      WHERE nr.id = node_attempts.node_run_id
+        AND nr.status = 'running'
+        AND wr.status IN ('pending', 'running')
+        AND wr.cancel_requested_at IS NULL
+        AND (wr.deadline_at IS NULL OR wr.deadline_at > now())
+  )
 RETURNING lease_expires_at
 `
 

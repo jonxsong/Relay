@@ -216,7 +216,19 @@ SET status = 'cancelled',
     completed_at = now(),
     updated_at = now()
 WHERE run_id = sqlc.arg(run_id)
-  AND status IN ('pending', 'ready', 'queued');
+  AND status IN ('pending', 'ready', 'queued', 'running');
+
+-- name: CancelActiveAttemptsForRun :many
+UPDATE node_attempts
+SET status = 'cancelled',
+    retryable = false,
+    error_code = 'run_cancelled',
+    error_message = 'run was cancelled while the node was executing',
+    completed_at = now(),
+    lease_expires_at = NULL
+WHERE node_run_id IN (SELECT id FROM node_runs WHERE run_id = sqlc.arg(run_id))
+  AND status IN ('queued', 'running')
+RETURNING *;
 
 -- name: AllocateEventSequence :one
 UPDATE workflow_runs
@@ -394,6 +406,16 @@ WHERE node_attempts.id = sqlc.arg(id)
   AND fencing_token = sqlc.arg(fencing_token)
   AND worker_id = sqlc.arg(worker_id)
   AND lease_expires_at > now()
+  AND EXISTS (
+      SELECT 1
+      FROM node_runs nr
+      JOIN workflow_runs wr ON wr.id = nr.run_id
+      WHERE nr.id = node_attempts.node_run_id
+        AND nr.status = 'running'
+        AND wr.status IN ('pending', 'running')
+        AND wr.cancel_requested_at IS NULL
+        AND (wr.deadline_at IS NULL OR wr.deadline_at > now())
+  )
 RETURNING lease_expires_at;
 
 -- name: CompleteNodeAttempt :one

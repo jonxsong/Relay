@@ -254,8 +254,17 @@ func (s *Store) CancelRun(ctx context.Context, ownerID, runID uuid.UUID) (db.Wor
 	if err != nil {
 		return db.WorkflowRun{}, classifyWriteError("request run cancellation", err)
 	}
+	cancelledAttempts, err := q.CancelActiveAttemptsForRun(ctx, runID)
+	if err != nil {
+		return db.WorkflowRun{}, fmt.Errorf("cancel active attempts: %w", err)
+	}
 	if _, err := q.CancelInactiveNodes(ctx, runID); err != nil {
-		return db.WorkflowRun{}, fmt.Errorf("cancel inactive nodes: %w", err)
+		return db.WorkflowRun{}, fmt.Errorf("cancel active nodes: %w", err)
+	}
+	for _, attempt := range cancelledAttempts {
+		if err := appendEvent(ctx, q, runID, "node.cancelled", &attempt.NodeRunID, &attempt.ID, json.RawMessage(`{"reason":"run_cancelled"}`)); err != nil {
+			return db.WorkflowRun{}, err
+		}
 	}
 	sequence, err := q.AllocateEventSequence(ctx, runID)
 	if err != nil {

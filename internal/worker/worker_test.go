@@ -18,6 +18,7 @@ type fakeAttemptRepository struct {
 	failures    int
 	failureCode string
 	retryable   bool
+	renewError  error
 }
 
 type blockingExecutor struct{}
@@ -30,8 +31,8 @@ func (blockingExecutor) Execute(ctx context.Context, _ string, _ json.RawMessage
 func (f *fakeAttemptRepository) ClaimAttempt(context.Context, uuid.UUID, string, time.Duration) (store.AttemptClaim, error) {
 	return f.claim, nil
 }
-func (*fakeAttemptRepository) RenewLease(context.Context, store.AttemptClaim, time.Duration) error {
-	return nil
+func (f *fakeAttemptRepository) RenewLease(context.Context, store.AttemptClaim, time.Duration) error {
+	return f.renewError
 }
 func (f *fakeAttemptRepository) CompleteAttemptSuccess(_ context.Context, _ store.AttemptClaim, output json.RawMessage, _ *domain.Usage) error {
 	if !json.Valid(output) {
@@ -105,5 +106,24 @@ func TestWorkerEnforcesEarlierRunDeadline(t *testing.T) {
 	}
 	if repository.failures != 1 || repository.failureCode != "run_deadline_exceeded" || repository.retryable {
 		t.Fatalf("failures=%d code=%q retryable=%v", repository.failures, repository.failureCode, repository.retryable)
+	}
+}
+
+func TestWorkerCancelsExecutionWhenLeaseBecomesInvalid(t *testing.T) {
+	t.Parallel()
+	repository := &fakeAttemptRepository{
+		claim:      store.AttemptClaim{NodeType: "llm", Input: json.RawMessage(`{}`)},
+		renewError: store.ErrRunCancelled,
+	}
+	processor, err := New(repository, blockingExecutor{}, "worker-test", 15*time.Second, 3)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	processor.lease = 15 * time.Millisecond
+	if err := processor.Handle(context.Background(), uuid.New()); !errors.Is(err, store.ErrRunCancelled) {
+		t.Fatalf("Handle() error = %v, want ErrRunCancelled", err)
+	}
+	if repository.successes != 0 || repository.failures != 0 {
+		t.Fatalf("stale worker recorded completion: successes=%d failures=%d", repository.successes, repository.failures)
 	}
 }

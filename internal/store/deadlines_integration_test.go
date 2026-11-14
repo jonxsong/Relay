@@ -48,7 +48,10 @@ func TestIntegrationExpiresRunDeadlineAndFencesWorker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scheduled, found, err := database.ScheduleOne(ctx, 10, 10)
+	if _, err := database.pool.Exec(ctx, `UPDATE workflow_runs SET created_at = '2000-01-02T00:00:00Z' WHERE id = $1`, submitted.Run.ID); err != nil {
+		t.Fatal(err)
+	}
+	scheduled, found, err := database.ScheduleOne(ctx, 10000, 10000)
 	if err != nil || !found {
 		t.Fatalf("ScheduleOne() = (%+v, %v, %v), want scheduled attempt", scheduled, found, err)
 	}

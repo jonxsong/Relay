@@ -15,6 +15,7 @@ type Querier interface {
 	AcquireSchedulerLock(ctx context.Context) error
 	AllocateEventSequence(ctx context.Context, runID uuid.UUID) (int64, error)
 	AppendExecutionEvent(ctx context.Context, arg AppendExecutionEventParams) (ExecutionEvent, error)
+	CancelActiveAttemptsForRun(ctx context.Context, runID uuid.UUID) ([]NodeAttempt, error)
 	CancelInactiveNodes(ctx context.Context, runID uuid.UUID) (int64, error)
 	CancelRunningNode(ctx context.Context, id uuid.UUID) (int64, error)
 	ClaimNodeAttempt(ctx context.Context, arg ClaimNodeAttemptParams) (NodeAttempt, error)

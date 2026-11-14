@@ -111,7 +111,11 @@ func (w *Worker) Handle(ctx context.Context, attemptID uuid.UUID) (handleErr err
 }
 
 func (w *Worker) renewLease(ctx context.Context, claim store.AttemptClaim, stop <-chan struct{}, failures chan<- error, cancel context.CancelFunc) {
-	ticker := time.NewTicker(w.lease / 3)
+	interval := w.lease / 3
+	if interval > 5*time.Second {
+		interval = 5 * time.Second
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
