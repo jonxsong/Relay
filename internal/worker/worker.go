@@ -67,7 +67,16 @@ func (w *Worker) Handle(ctx context.Context, attemptID uuid.UUID) (handleErr err
 		attribute.String("relay.node.type", claim.NodeType),
 		attribute.Int("relay.attempt.number", int(claim.AttemptNo)),
 	)
-	executionContext, cancelExecution := context.WithTimeout(ctx, w.nodeTimeout)
+	executionDeadline := time.Now().Add(w.nodeTimeout)
+	deadlineCode := "node_deadline_exceeded"
+	if claim.NodeTimeout > 0 {
+		executionDeadline = time.Now().Add(claim.NodeTimeout)
+	}
+	if claim.RunDeadline != nil && claim.RunDeadline.Before(executionDeadline) {
+		executionDeadline = *claim.RunDeadline
+		deadlineCode = "run_deadline_exceeded"
+	}
+	executionContext, cancelExecution := context.WithDeadline(ctx, executionDeadline)
 	defer cancelExecution()
 	leaseErrors := make(chan error, 1)
 	stopRenewal := make(chan struct{})
@@ -88,7 +97,10 @@ func (w *Worker) Handle(ctx context.Context, attemptID uuid.UUID) (handleErr err
 	code := "execution_failed"
 	retryable := false
 	var typedError *ExecutionError
-	if errors.As(executionErr, &typedError) {
+	if errors.Is(executionContext.Err(), context.DeadlineExceeded) {
+		code = deadlineCode
+		executionErr = fmt.Errorf("%s: execution deadline exceeded", deadlineCode)
+	} else if errors.As(executionErr, &typedError) {
 		code = typedError.Code
 		retryable = typedError.Retryable
 	}

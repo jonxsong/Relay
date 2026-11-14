@@ -80,6 +80,16 @@ func run() error {
 func runPass(ctx context.Context, database *store.Store, broker *dispatcher.NATS, globalConcurrency, runConcurrency int32, maxRetries int) error {
 	ctx, span := otel.Tracer("github.com/jonxsong/Relay/controlplane").Start(ctx, "controlplane.pass")
 	defer span.End()
+	expiredRuns, err := database.ExpireOverdueRuns(ctx, 100)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "expire overdue runs")
+		return err
+	}
+	span.SetAttributes(attribute.Int("relay.runs.deadline_expired", expiredRuns))
+	if expiredRuns > 0 {
+		slog.Info("overdue runs failed", "count", expiredRuns)
+	}
 	recovered, err := database.RecoverExpiredAttempts(ctx, 100, maxRetries)
 	if err != nil {
 		span.RecordError(err)

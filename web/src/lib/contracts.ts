@@ -18,6 +18,7 @@ export const workflowSchema = z.object({
         type: z.enum(["llm", "tool", "transform", "join"]),
         depends_on: z.array(z.string()).optional(),
         inputs: z.record(z.string(), z.unknown()).optional(),
+        timeout_seconds: z.number().int().min(1).max(3600).optional(),
       })),
     }).optional(),
   }).optional(),
@@ -31,6 +32,8 @@ export const runSchema = z.object({
   output: z.unknown().optional(),
   error_code: z.string().nullable().optional(),
   error_message: z.string().nullable().optional(),
+  cost_budget_microusd: z.number().int().nonnegative().nullable().optional(),
+  deadline: z.iso.datetime().nullable().optional(),
   created_at: z.iso.datetime(),
   started_at: z.iso.datetime().nullable().optional(),
   completed_at: z.iso.datetime().nullable().optional(),
@@ -46,6 +49,7 @@ export const nodeRunSchema = z.object({
   error_code: z.string().nullable().optional(),
   error_message: z.string().nullable().optional(),
   depends_on: z.array(z.string()),
+  timeout_seconds: z.number().int().min(1).max(3600),
 });
 
 export const nodeAttemptSchema = z.object({

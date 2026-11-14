@@ -60,6 +60,21 @@ func TestValidateWorkflowEnforcesDepth(t *testing.T) {
 	}
 }
 
+func TestValidateWorkflowEnforcesNodeTimeoutBounds(t *testing.T) {
+	t.Parallel()
+	for _, timeout := range []int32{-1, 3601} {
+		workflow := WorkflowDefinition{Name: "timeout", Nodes: []NodeDefinition{{ID: "work", Type: NodeTypeLLM, TimeoutSeconds: timeout}}}
+		err := ValidateWorkflow(workflow, DefaultWorkflowLimits)
+		if err == nil || !strings.Contains(err.Error(), "timeout_seconds") {
+			t.Fatalf("ValidateWorkflow(timeout=%d) error = %v, want timeout validation error", timeout, err)
+		}
+	}
+	workflow := WorkflowDefinition{Name: "timeout", Nodes: []NodeDefinition{{ID: "work", Type: NodeTypeLLM, TimeoutSeconds: 30}}}
+	if err := ValidateWorkflow(workflow, DefaultWorkflowLimits); err != nil {
+		t.Fatalf("ValidateWorkflow(valid timeout) error = %v", err)
+	}
+}
+
 func TestBindingAllowsOnlyRestrictedReferences(t *testing.T) {
 	t.Parallel()
 	valid := []string{"$.input", "$.input.customer.id", "$.input.items[0].name", "$.nodes.fetch.output", "$.nodes.fetch_data.output.items[2]"}

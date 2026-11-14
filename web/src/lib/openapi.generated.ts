@@ -318,6 +318,11 @@ export interface components {
             readonly inputs?: {
                 readonly [key: string]: components["schemas"]["InputBinding"];
             };
+            /**
+             * Format: int32
+             * @description Immutable wall-clock execution limit for this node. Defaults to 120 seconds.
+             */
+            readonly timeout_seconds?: number;
         };
         readonly InputBinding: {
             readonly value?: unknown;
@@ -341,6 +346,10 @@ export interface components {
             readonly output?: unknown;
             readonly error_code?: string | null;
             readonly error_message?: string | null;
+            /** Format: int64 */
+            readonly cost_budget_microusd?: number | null;
+            /** Format: date-time */
+            readonly deadline?: string | null;
             /** Format: date-time */
             readonly created_at: string;
             /** Format: date-time */
@@ -357,6 +366,8 @@ export interface components {
             /** Format: int32 */
             readonly current_attempt_no: number;
             readonly depends_on: readonly string[];
+            /** Format: int32 */
+            readonly timeout_seconds: number;
             readonly output?: unknown;
             readonly error_code?: string | null;
             readonly error_message?: string | null;

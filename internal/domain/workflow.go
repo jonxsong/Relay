@@ -30,10 +30,11 @@ type WorkflowDefinition struct {
 }
 
 type NodeDefinition struct {
-	ID        string                  `json:"id"`
-	Type      NodeType                `json:"type"`
-	DependsOn []string                `json:"depends_on,omitempty"`
-	Inputs    map[string]InputBinding `json:"inputs,omitempty"`
+	ID             string                  `json:"id"`
+	Type           NodeType                `json:"type"`
+	DependsOn      []string                `json:"depends_on,omitempty"`
+	Inputs         map[string]InputBinding `json:"inputs,omitempty"`
+	TimeoutSeconds int32                   `json:"timeout_seconds,omitempty"`
 }
 
 type InputBinding struct {
@@ -104,6 +105,9 @@ func ValidateWorkflow(def WorkflowDefinition, limits WorkflowLimits) error {
 		case NodeTypeLLM, NodeTypeTool, NodeTypeTransform, NodeTypeJoin:
 		default:
 			problems = append(problems, ValidationError{Path: path + ".type", Message: "must be one of llm, tool, transform, or join"})
+		}
+		if node.TimeoutSeconds < 0 || node.TimeoutSeconds > 3600 {
+			problems = append(problems, ValidationError{Path: path + ".timeout_seconds", Message: "must be between 1 and 3600 when provided"})
 		}
 
 		seenDependency := make(map[string]struct{}, len(node.DependsOn))

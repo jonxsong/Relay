@@ -504,6 +504,38 @@ ORDER BY lease_expires_at, id
 LIMIT sqlc.arg(batch_size)
 FOR UPDATE SKIP LOCKED;
 
+-- name: LockOverdueRuns :many
+SELECT *
+FROM workflow_runs
+WHERE status IN ('pending', 'running')
+  AND deadline_at IS NOT NULL
+  AND deadline_at <= now()
+ORDER BY deadline_at, id
+LIMIT sqlc.arg(batch_size)
+FOR UPDATE SKIP LOCKED;
+
+-- name: FailAttemptsForRunDeadline :execrows
+UPDATE node_attempts
+SET status = 'failed',
+    retryable = false,
+    error_code = 'run_deadline_exceeded',
+    error_message = 'run deadline elapsed before execution completed',
+    completed_at = now(),
+    lease_expires_at = NULL
+WHERE node_run_id IN (SELECT id FROM node_runs WHERE run_id = sqlc.arg(run_id))
+  AND status IN ('queued', 'running');
+
+-- name: FailNodesForRunDeadline :many
+UPDATE node_runs
+SET status = 'failed',
+    error_code = 'run_deadline_exceeded',
+    error_message = 'run deadline elapsed before execution completed',
+    completed_at = now(),
+    updated_at = now()
+WHERE run_id = sqlc.arg(run_id)
+  AND status NOT IN ('succeeded', 'failed', 'cancelled', 'skipped')
+RETURNING *;
+
 -- name: ExpireAttempt :execrows
 UPDATE node_attempts
 SET status = 'expired',

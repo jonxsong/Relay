@@ -30,6 +30,8 @@ type AttemptClaim struct {
 	FencingToken int64
 	WorkerID     string
 	Input        json.RawMessage
+	NodeTimeout  time.Duration
+	RunDeadline  *time.Time
 }
 
 func (s *Store) ClaimAttempt(ctx context.Context, attemptID uuid.UUID, workerID string, leaseDuration time.Duration) (AttemptClaim, error) {
@@ -66,6 +68,30 @@ func (s *Store) ClaimAttempt(ctx context.Context, attemptID uuid.UUID, workerID 
 	if err != nil {
 		return AttemptClaim{}, classifyReadError("get claimed node", err)
 	}
+	run, err := q.GetRunByID(ctx, node.RunID)
+	if err != nil {
+		return AttemptClaim{}, classifyReadError("get claimed run", err)
+	}
+	definitionJSON, err := q.GetWorkflowDefinitionForRun(ctx, node.RunID)
+	if err != nil {
+		return AttemptClaim{}, classifyReadError("get claimed workflow definition", err)
+	}
+	var definition domain.WorkflowDefinition
+	if err := json.Unmarshal(definitionJSON, &definition); err != nil {
+		return AttemptClaim{}, fmt.Errorf("decode claimed workflow definition: %w", err)
+	}
+	var nodeTimeout time.Duration
+	for _, configuredNode := range definition.Nodes {
+		if configuredNode.ID == node.NodeKey {
+			nodeTimeout = time.Duration(configuredNode.TimeoutSeconds) * time.Second
+			break
+		}
+	}
+	var runDeadline *time.Time
+	if run.DeadlineAt.Valid {
+		deadline := run.DeadlineAt.Time.UTC()
+		runDeadline = &deadline
+	}
 	payload, _ := json.Marshal(map[string]any{"worker_id": workerID, "attempt_no": attempt.AttemptNo})
 	if err := appendEvent(ctx, q, node.RunID, "node.running", &node.ID, &attempt.ID, payload); err != nil {
 		return AttemptClaim{}, err
@@ -76,6 +102,7 @@ func (s *Store) ClaimAttempt(ctx context.Context, attemptID uuid.UUID, workerID 
 	return AttemptClaim{
 		AttemptID: attempt.ID, NodeRunID: node.ID, RunID: node.RunID, NodeKey: node.NodeKey, NodeType: node.NodeType,
 		AttemptNo: attempt.AttemptNo, FencingToken: attempt.FencingToken, WorkerID: workerID, Input: attempt.Input,
+		NodeTimeout: nodeTimeout, RunDeadline: runDeadline,
 	}, nil
 }
 

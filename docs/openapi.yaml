@@ -442,6 +442,12 @@ components:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/InputBinding"
+        timeout_seconds:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 3600
+          description: Immutable wall-clock execution limit for this node. Defaults to 120 seconds.
     InputBinding:
       type: object
       additionalProperties: false
@@ -469,12 +475,14 @@ components:
         output: {}
         error_code: {type: [string, "null"]}
         error_message: {type: [string, "null"]}
+        cost_budget_microusd: {type: [integer, "null"], format: int64, minimum: 0}
+        deadline: {type: [string, "null"], format: date-time}
         created_at: {type: string, format: date-time}
         started_at: {type: [string, "null"], format: date-time}
         completed_at: {type: [string, "null"], format: date-time}
     NodeRun:
       type: object
-      required: [id, node_key, node_type, status, current_attempt_no, depends_on]
+      required: [id, node_key, node_type, status, current_attempt_no, depends_on, timeout_seconds]
       properties:
         id: {type: string, format: uuid}
         node_key: {type: string}
@@ -484,6 +492,7 @@ components:
         depends_on:
           type: array
           items: {type: string}
+        timeout_seconds: {type: integer, format: int32, minimum: 1, maximum: 3600}
         output: {}
         error_code: {type: [string, "null"]}
         error_message: {type: [string, "null"]}

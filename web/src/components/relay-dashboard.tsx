@@ -28,7 +28,7 @@ type ExecutionNodeData = { node: NodeRun };
 type ExecutionNode = Node<ExecutionNodeData, "execution">;
 type WorkflowNodeData = { id: string; type: string };
 type WorkflowGraphNode = Node<WorkflowNodeData, "workflowDefinition">;
-type WorkflowDefinitionNode = { id: string; type: "llm" | "tool" | "transform" | "join"; depends_on?: string[] };
+type WorkflowDefinitionNode = { id: string; type: "llm" | "tool" | "transform" | "join"; depends_on?: string[]; timeout_seconds?: number };
 
 const nav = [
   ["overview", LayoutDashboard, "Overview"], ["workflows", WorkflowIcon, "Workflows"],

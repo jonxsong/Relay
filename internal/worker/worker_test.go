@@ -20,6 +20,13 @@ type fakeAttemptRepository struct {
 	retryable   bool
 }
 
+type blockingExecutor struct{}
+
+func (blockingExecutor) Execute(ctx context.Context, _ string, _ json.RawMessage) (ExecutionResult, error) {
+	<-ctx.Done()
+	return ExecutionResult{}, ctx.Err()
+}
+
 func (f *fakeAttemptRepository) ClaimAttempt(context.Context, uuid.UUID, string, time.Duration) (store.AttemptClaim, error) {
 	return f.claim, nil
 }
@@ -66,6 +73,37 @@ func TestWorkerRecordsPermanentToolFailure(t *testing.T) {
 		t.Fatalf("Handle() error = %v", err)
 	}
 	if repository.failures != 1 || repository.failureCode != "tool_not_configured" || repository.retryable {
+		t.Fatalf("failures=%d code=%q retryable=%v", repository.failures, repository.failureCode, repository.retryable)
+	}
+}
+
+func TestWorkerEnforcesConfiguredNodeDeadline(t *testing.T) {
+	t.Parallel()
+	repository := &fakeAttemptRepository{claim: store.AttemptClaim{NodeType: "llm", Input: json.RawMessage(`{}`), NodeTimeout: 5 * time.Millisecond}}
+	processor, err := New(repository, blockingExecutor{}, "worker-test", 15*time.Second, 3)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if err := processor.Handle(context.Background(), uuid.New()); err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if repository.failures != 1 || repository.failureCode != "node_deadline_exceeded" || repository.retryable {
+		t.Fatalf("failures=%d code=%q retryable=%v", repository.failures, repository.failureCode, repository.retryable)
+	}
+}
+
+func TestWorkerEnforcesEarlierRunDeadline(t *testing.T) {
+	t.Parallel()
+	deadline := time.Now().Add(5 * time.Millisecond)
+	repository := &fakeAttemptRepository{claim: store.AttemptClaim{NodeType: "llm", Input: json.RawMessage(`{}`), NodeTimeout: time.Minute, RunDeadline: &deadline}}
+	processor, err := New(repository, blockingExecutor{}, "worker-test", 15*time.Second, 3)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if err := processor.Handle(context.Background(), uuid.New()); err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	if repository.failures != 1 || repository.failureCode != "run_deadline_exceeded" || repository.retryable {
 		t.Fatalf("failures=%d code=%q retryable=%v", repository.failures, repository.failureCode, repository.retryable)
 	}
 }

@@ -37,16 +37,18 @@ type submitRunRequest struct {
 }
 
 type runResponse struct {
-	ID                uuid.UUID       `json:"id"`
-	WorkflowVersionID uuid.UUID       `json:"workflow_version_id"`
-	Status            string          `json:"status"`
-	Input             json.RawMessage `json:"input"`
-	Output            json.RawMessage `json:"output,omitempty"`
-	ErrorCode         *string         `json:"error_code,omitempty"`
-	ErrorMessage      *string         `json:"error_message,omitempty"`
-	CreatedAt         time.Time       `json:"created_at"`
-	StartedAt         *time.Time      `json:"started_at,omitempty"`
-	CompletedAt       *time.Time      `json:"completed_at,omitempty"`
+	ID                 uuid.UUID       `json:"id"`
+	WorkflowVersionID  uuid.UUID       `json:"workflow_version_id"`
+	Status             string          `json:"status"`
+	Input              json.RawMessage `json:"input"`
+	Output             json.RawMessage `json:"output,omitempty"`
+	ErrorCode          *string         `json:"error_code,omitempty"`
+	ErrorMessage       *string         `json:"error_message,omitempty"`
+	CostBudgetMicrousd *int64          `json:"cost_budget_microusd,omitempty"`
+	Deadline           *time.Time      `json:"deadline,omitempty"`
+	CreatedAt          time.Time       `json:"created_at"`
+	StartedAt          *time.Time      `json:"started_at,omitempty"`
+	CompletedAt        *time.Time      `json:"completed_at,omitempty"`
 }
 
 type nodeRunResponse struct {
@@ -59,6 +61,7 @@ type nodeRunResponse struct {
 	ErrorCode        *string         `json:"error_code,omitempty"`
 	ErrorMessage     *string         `json:"error_message,omitempty"`
 	DependsOn        []string        `json:"depends_on"`
+	TimeoutSeconds   int32           `json:"timeout_seconds"`
 }
 
 type eventResponse struct {
@@ -385,13 +388,19 @@ func listRunNodesHandler(repository RunRepository) http.HandlerFunc {
 			return
 		}
 		dependencies := make(map[string][]string, len(definition.Nodes))
+		timeouts := make(map[string]int32, len(definition.Nodes))
 		for _, node := range definition.Nodes {
 			dependencies[node.ID] = node.DependsOn
+			timeouts[node.ID] = node.TimeoutSeconds
 		}
 		items := make([]nodeRunResponse, 0, len(nodes))
 		for _, node := range nodes {
 			response := nodeFromDB(node)
 			response.DependsOn = dependencies[node.NodeKey]
+			response.TimeoutSeconds = timeouts[node.NodeKey]
+			if response.TimeoutSeconds == 0 {
+				response.TimeoutSeconds = 120
+			}
 			if response.DependsOn == nil {
 				response.DependsOn = []string{}
 			}
@@ -468,7 +477,8 @@ func writeRunRepositoryError(w http.ResponseWriter, r *http.Request, err error) 
 
 func runFromDB(run db.WorkflowRun) runResponse {
 	return runResponse{ID: run.ID, WorkflowVersionID: run.WorkflowVersionID, Status: run.Status, Input: run.Input, Output: run.Output,
-		ErrorCode: run.ErrorCode, ErrorMessage: run.ErrorMessage, CreatedAt: timeFromTimestamptz(run.CreatedAt),
+		ErrorCode: run.ErrorCode, ErrorMessage: run.ErrorMessage, CostBudgetMicrousd: run.CostBudgetMicrousd,
+		Deadline: optionalTime(run.DeadlineAt), CreatedAt: timeFromTimestamptz(run.CreatedAt),
 		StartedAt: optionalTime(run.StartedAt), CompletedAt: optionalTime(run.CompletedAt)}
 }
 

@@ -721,6 +721,75 @@ func (q *Queries) ExpireAttempt(ctx context.Context, arg ExpireAttemptParams) (i
 	return result.RowsAffected(), nil
 }
 
+const failAttemptsForRunDeadline = `-- name: FailAttemptsForRunDeadline :execrows
+UPDATE node_attempts
+SET status = 'failed',
+    retryable = false,
+    error_code = 'run_deadline_exceeded',
+    error_message = 'run deadline elapsed before execution completed',
+    completed_at = now(),
+    lease_expires_at = NULL
+WHERE node_run_id IN (SELECT id FROM node_runs WHERE run_id = $1)
+  AND status IN ('queued', 'running')
+`
+
+func (q *Queries) FailAttemptsForRunDeadline(ctx context.Context, runID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, failAttemptsForRunDeadline, runID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const failNodesForRunDeadline = `-- name: FailNodesForRunDeadline :many
+UPDATE node_runs
+SET status = 'failed',
+    error_code = 'run_deadline_exceeded',
+    error_message = 'run deadline elapsed before execution completed',
+    completed_at = now(),
+    updated_at = now()
+WHERE run_id = $1
+  AND status NOT IN ('succeeded', 'failed', 'cancelled', 'skipped')
+RETURNING id, run_id, node_key, node_type, status, dependency_count, succeeded_dependency_count, current_attempt_no, next_attempt_at, output, error_code, error_message, started_at, completed_at, created_at, updated_at
+`
+
+func (q *Queries) FailNodesForRunDeadline(ctx context.Context, runID uuid.UUID) ([]NodeRun, error) {
+	rows, err := q.db.Query(ctx, failNodesForRunDeadline, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []NodeRun{}
+	for rows.Next() {
+		var i NodeRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.NodeKey,
+			&i.NodeType,
+			&i.Status,
+			&i.DependencyCount,
+			&i.SucceededDependencyCount,
+			&i.CurrentAttemptNo,
+			&i.NextAttemptAt,
+			&i.Output,
+			&i.ErrorCode,
+			&i.ErrorMessage,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLatestWorkflowVersion = `-- name: GetLatestWorkflowVersion :one
 SELECT wv.id, wv.workflow_id, wv.version, wv.definition, wv.definition_sha256, wv.created_by, wv.created_at
 FROM workflow_versions wv
@@ -1366,6 +1435,54 @@ func (q *Queries) LockOneReadyNode(ctx context.Context, runConcurrency int32) (L
 		&i.WorkflowDefinition,
 	)
 	return i, err
+}
+
+const lockOverdueRuns = `-- name: LockOverdueRuns :many
+SELECT id, workflow_version_id, owner_id, status, input, output, error_code, error_message, cost_budget_microusd, deadline_at, cancel_requested_at, started_at, completed_at, created_at, updated_at, next_event_sequence
+FROM workflow_runs
+WHERE status IN ('pending', 'running')
+  AND deadline_at IS NOT NULL
+  AND deadline_at <= now()
+ORDER BY deadline_at, id
+LIMIT $1
+FOR UPDATE SKIP LOCKED
+`
+
+func (q *Queries) LockOverdueRuns(ctx context.Context, batchSize int32) ([]WorkflowRun, error) {
+	rows, err := q.db.Query(ctx, lockOverdueRuns, batchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorkflowRun{}
+	for rows.Next() {
+		var i WorkflowRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkflowVersionID,
+			&i.OwnerID,
+			&i.Status,
+			&i.Input,
+			&i.Output,
+			&i.ErrorCode,
+			&i.ErrorMessage,
+			&i.CostBudgetMicrousd,
+			&i.DeadlineAt,
+			&i.CancelRequestedAt,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.NextEventSequence,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockPendingOutboxEvents = `-- name: LockPendingOutboxEvents :many
