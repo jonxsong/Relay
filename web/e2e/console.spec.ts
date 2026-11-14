@@ -29,6 +29,8 @@ test("creates, executes, inspects, and cancels a workflow", async ({ page }) => 
 
   const card = page.locator(".workflow-cards article").filter({ hasText: workflowName });
   await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "Inspect" }).click();
+  await expect(page.locator(".workflow-preview").getByText("respond", { exact: true })).toBeVisible();
   await card.getByRole("button", { name: "Run" }).click();
   const runDialog = page.getByRole("dialog", { name: "Submit a run" });
   await runDialog.getByRole("textbox", { name: "Run input" }).fill('{"prompt":"browser acceptance"}');

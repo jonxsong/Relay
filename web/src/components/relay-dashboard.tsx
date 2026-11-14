@@ -24,6 +24,8 @@ type DialogKind = "workflow" | "run" | "auth" | null;
 type ConsoleView = "overview" | "workflows" | "runs" | "activity" | "usage" | "connections";
 type ExecutionNodeData = { node: NodeRun };
 type ExecutionNode = Node<ExecutionNodeData, "execution">;
+type WorkflowNodeData = { id: string; type: string };
+type WorkflowGraphNode = Node<WorkflowNodeData, "workflowDefinition">;
 
 const nav = [
   ["overview", LayoutDashboard, "Overview"], ["workflows", WorkflowIcon, "Workflows"],
@@ -59,7 +61,12 @@ function ExecutionNodeCard({ data }: NodeProps<ExecutionNode>) {
   );
 }
 
-const nodeTypes: NodeTypes = { execution: ExecutionNodeCard };
+function WorkflowNodeCard({ data }: NodeProps<WorkflowGraphNode>) {
+  const Icon = data.type === "llm" ? Bot : data.type === "tool" ? Wrench : data.type === "join" ? GitBranch : Braces;
+  return <div className="workflow-node"><Handle type="target" position={Position.Left} className="flow-handle" /><div><Icon size={16} /></div><span><strong>{data.id}</strong><small>{data.type}</small></span><Handle type="source" position={Position.Right} className="flow-handle" /></div>;
+}
+
+const nodeTypes: NodeTypes = { execution: ExecutionNodeCard, workflowDefinition: WorkflowNodeCard };
 
 function formatDuration(run: Run) {
   if (!run.started_at) return "—";
@@ -79,6 +86,8 @@ function Metric({ value, label, Icon, tone }: { value: string; label: string; Ic
 
 export function RelayDashboard() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [selectedWorkflowID, setSelectedWorkflowID] = useState<string | null>(null);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
   const [selectedRunID, setSelectedRunID] = useState<string | null>(null);
   const [nodes, setNodes] = useState<NodeRun[]>([]);
@@ -181,6 +190,17 @@ export function RelayDashboard() {
     });
     return () => controller.abort();
   }, [selectedRunID, connection]);
+
+  useEffect(() => {
+    if (!selectedWorkflowID || connection !== "live") return;
+    const controller = new AbortController();
+    void relayGet(`/workflows/${selectedWorkflowID}/`, workflowSchema, controller.signal)
+      .then(setSelectedWorkflow)
+      .catch((reason) => {
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Workflow definition unavailable");
+      });
+    return () => controller.abort();
+  }, [selectedWorkflowID, connection]);
 
   useEffect(() => {
     if (!selectedRunID || !selectedNodeID || connection !== "live") {
@@ -329,6 +349,29 @@ export function RelayDashboard() {
       }] : [];
     }));
   }, [nodes]);
+  const workflowGraph = useMemo(() => {
+    const definitions = selectedWorkflow?.version?.definition?.nodes ?? [];
+    const byID = new Map(definitions.map((node) => [node.id, node]));
+    const depths = new Map<string, number>();
+    const depth = (id: string, visiting = new Set<string>()): number => {
+      const cached = depths.get(id);
+      if (cached !== undefined) return cached;
+      if (visiting.has(id)) return 0;
+      visiting.add(id);
+      const dependencies = byID.get(id)?.depends_on ?? [];
+      const value = dependencies.length === 0 ? 0 : 1 + Math.max(...dependencies.map((dependency) => depth(dependency, visiting)));
+      visiting.delete(id);
+      depths.set(id, value);
+      return value;
+    };
+    const graphNodes: WorkflowGraphNode[] = definitions.map((node) => {
+      const column = depth(node.id);
+      const row = definitions.filter((candidate) => depth(candidate.id) === column).findIndex((candidate) => candidate.id === node.id);
+      return { id: node.id, type: "workflowDefinition", data: { id: node.id, type: node.type }, position: { x: 54 + column * 240, y: 60 + Math.max(0, row) * 100 } };
+    });
+    const graphEdges: Edge[] = definitions.flatMap((node) => (node.depends_on ?? []).map((dependency) => ({ id: `${dependency}-${node.id}`, source: dependency, target: node.id, style: { stroke: "#655bd4", strokeWidth: 1.5 } })));
+    return { nodes: graphNodes, edges: graphEdges };
+  }, [selectedWorkflow]);
 
   return (
     <div className="app-shell">
@@ -378,7 +421,7 @@ export function RelayDashboard() {
         </section>
         </div>
 
-        {activeView === "workflows" ? <section className="view-page"><div className="view-page-heading"><div><span className="section-index">WF</span><div><h2>Workflow catalog</h2><p>{workflows.length} immutable workflow{workflows.length === 1 ? "" : "s"}</p></div></div><button className="primary-action" onClick={() => { setMutationError(null); setDialog("workflow"); }} disabled={connection !== "live"}><Plus size={15} />New workflow</button></div><div className="workflow-cards">{workflows.length === 0 ? <div className="view-empty"><WorkflowIcon size={24} /><h3>No workflows yet</h3><p>Create a validated DAG to begin executing agent work.</p></div> : workflows.map((workflow) => <article key={workflow.id}><div className="workflow-card-mark"><WorkflowIcon size={18} /></div><div><h3>{workflow.name}</h3><p>{workflow.description || "No description"}</p><span><code>{workflow.id.slice(0, 8)}</code> · created {new Date(workflow.created_at).toLocaleDateString()}</span></div><button onClick={() => { setRunWorkflowID(workflow.id); setMutationError(null); setDialog("run"); }}><Play size={14} />Run</button></article>)}</div></section> : null}
+        {activeView === "workflows" ? <section className="view-page"><div className="view-page-heading"><div><span className="section-index">WF</span><div><h2>Workflow catalog</h2><p>{workflows.length} immutable workflow{workflows.length === 1 ? "" : "s"}</p></div></div><button className="primary-action" onClick={() => { setMutationError(null); setDialog("workflow"); }} disabled={connection !== "live"}><Plus size={15} />New workflow</button></div><div className="workflow-layout"><div className="workflow-cards">{workflows.length === 0 ? <div className="view-empty"><WorkflowIcon size={24} /><h3>No workflows yet</h3><p>Create a validated DAG to begin executing agent work.</p></div> : workflows.map((workflow) => <article className={selectedWorkflowID === workflow.id ? "selected" : ""} key={workflow.id}><div className="workflow-card-mark"><WorkflowIcon size={18} /></div><div><h3>{workflow.name}</h3><p>{workflow.description || "No description"}</p><span><code>{workflow.id.slice(0, 8)}</code> · created {new Date(workflow.created_at).toLocaleDateString()}</span></div><div className="workflow-card-actions"><button onClick={() => { setSelectedWorkflow(null); setSelectedWorkflowID(workflow.id); }}><GitBranch size={14} />Inspect</button><button onClick={() => { setRunWorkflowID(workflow.id); setMutationError(null); setDialog("run"); }}><Play size={14} />Run</button></div></article>)}</div><div className="workflow-preview panel">{selectedWorkflow && workflowGraph.nodes.length > 0 ? <><header><div><span>VERSION {selectedWorkflow.version?.version}</span><h3>{selectedWorkflow.name}</h3></div><code>{workflowGraph.nodes.length} nodes</code></header><div><ReactFlow nodes={workflowGraph.nodes} edges={workflowGraph.edges} nodeTypes={nodeTypes} fitView nodesDraggable={false} nodesConnectable={false} minZoom={0.45} maxZoom={1.6}><Background color="#34354b" gap={22} size={1} /><Controls showInteractive={false} /></ReactFlow></div></> : <div className="view-empty"><GitBranch size={24} /><h3>Inspect a workflow</h3><p>Select a workflow to view the immutable DAG version that Relay will execute.</p></div>}</div></div></section> : null}
 
         {activeView === "runs" ? <section className="view-page"><div className="view-page-heading"><div><span className="section-index">RUN</span><div><h2>All runs</h2><p>Select a run to load its graph, events, and usage.</p></div></div><button className="primary-action" onClick={openRunDialog} disabled={connection !== "live" || workflows.length === 0}><Play size={15} />New run</button></div><div className="panel"><div className="run-table"><div className="run-row run-header"><span>Run</span><span>Status</span><span>Created</span><span>Duration</span></div>{visibleRuns.map((run) => <button className={`run-row ${run.id === selectedRunID ? "selected" : ""}`} key={run.id} onClick={() => { setSelectedRunID(run.id); setActiveView("overview"); }}><span><code>{run.id}</code><small>{run.workflow_version_id}</small></span><span><i className={`status-dot ${run.status}`} />{run.status}</span><span>{new Date(run.created_at).toLocaleString()}</span><span>{formatDuration(run)}</span></button>)}</div></div></section> : null}
 

@@ -12,7 +12,7 @@ export const workflowSchema = z.object({
     version: z.number().int(),
     created_at: z.iso.datetime(),
     definition: z.object({
-      name: z.string(),
+      name: z.string().optional(),
       nodes: z.array(z.object({
         id: z.string(),
         type: z.enum(["llm", "tool", "transform", "join"]),
