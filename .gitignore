@@ -13,6 +13,7 @@ node_modules/
 .next/
 playwright-report/
 test-results/
+status-site/.site-publisher-git/
 
 # Editors and OS
 .idea/
