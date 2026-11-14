@@ -46,7 +46,10 @@ func TestIntegrationRecoversCrashWindowAndRejectsStaleWorkers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, found, err := database.ScheduleOne(ctx, 10, 10)
+	if _, err := database.pool.Exec(ctx, `UPDATE workflow_runs SET created_at = '1999-12-31T00:00:00Z' WHERE id = $1`, submitted.Run.ID); err != nil {
+		t.Fatal(err)
+	}
+	first, found, err := database.ScheduleOne(ctx, 10000, 10000)
 	if err != nil || !found {
 		t.Fatalf("ScheduleOne() = (%+v, %v, %v), want scheduled attempt", first, found, err)
 	}
@@ -92,7 +95,7 @@ func TestIntegrationRecoversCrashWindowAndRejectsStaleWorkers(t *testing.T) {
 	if _, err := database.pool.Exec(ctx, `UPDATE node_runs SET next_attempt_at = now() WHERE id = $1`, first.NodeRunID); err != nil {
 		t.Fatal(err)
 	}
-	second, found, err := database.ScheduleOne(ctx, 10, 10)
+	second, found, err := database.ScheduleOne(ctx, 10000, 10000)
 	if err != nil || !found || second.AttemptID == first.AttemptID {
 		t.Fatalf("retry ScheduleOne() = (%+v, %v, %v)", second, found, err)
 	}
