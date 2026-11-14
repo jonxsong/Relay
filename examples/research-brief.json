@@ -1,0 +1,57 @@
+{
+  "name": "research-brief",
+  "description": "Two independent research nodes followed by a durable join and synthesis.",
+  "definition": {
+    "nodes": [
+      {
+        "id": "market_research",
+        "type": "llm",
+        "inputs": {
+          "prompt": {
+            "from": "$.input.market_prompt"
+          }
+        }
+      },
+      {
+        "id": "technical_research",
+        "type": "llm",
+        "inputs": {
+          "prompt": {
+            "from": "$.input.technical_prompt"
+          }
+        }
+      },
+      {
+        "id": "collect",
+        "type": "join",
+        "depends_on": [
+          "market_research",
+          "technical_research"
+        ],
+        "inputs": {
+          "market": {
+            "from": "$.nodes.market_research.output"
+          },
+          "technical": {
+            "from": "$.nodes.technical_research.output"
+          }
+        }
+      },
+      {
+        "id": "synthesize",
+        "type": "llm",
+        "depends_on": [
+          "collect"
+        ],
+        "inputs": {
+          "context": {
+            "from": "$.nodes.collect.output"
+          },
+          "instruction": {
+            "value": "Write a concise decision brief with risks and next steps."
+          }
+        }
+      }
+    ]
+  }
+}

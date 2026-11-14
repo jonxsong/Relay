@@ -1,0 +1,65 @@
+# Deploying Relay
+
+This guide describes a single-host deployment suitable for evaluation. It is not a substitute for a platform-specific security review.
+
+## Prerequisites
+
+- A Linux host with Docker Engine and Compose v2
+- DNS A/AAAA records for the chosen hostname
+- Ports 80 and 443 reachable by a maintained TLS reverse proxy
+- Persistent, encrypted storage for PostgreSQL
+
+## Secrets
+
+Create a deployment-only .env that is never committed:
+
+~~~dotenv
+POSTGRES_PASSWORD=replace-with-a-random-database-password
+RELAY_ENV=production
+RELAY_API_KEY=replace-with-at-least-32-random-characters
+RELAY_PROVIDER=mock
+~~~
+
+For live model execution, set the provider to OpenAI and mount the OpenAI key file. Prefer file-mounted platform secrets over environment variables.
+
+## Start and verify
+
+~~~bash
+docker compose pull
+docker compose up --build -d
+docker compose ps
+curl --fail http://127.0.0.1:8080/api/v1/health/ready
+curl --fail http://127.0.0.1:3000/
+~~~
+
+Only the console should be internet-facing. Bind the API, NATS, and PostgreSQL ports to loopback or remove their host mappings on an external host.
+
+## TLS reverse proxy
+
+An example Caddy site for relay.jonzhang.dev:
+
+~~~caddyfile
+relay.jonzhang.dev {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:3000
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        -Server
+    }
+}
+~~~
+
+The Next.js route handler proxies API and SSE traffic to the private API service. It forwards an incoming bearer header but never bakes a Relay key into the browser bundle or container image.
+
+## Operations
+
+- Back up PostgreSQL before upgrades and test a restore.
+- Apply Goose migrations before starting new service binaries.
+- Scale workers horizontally; do not scale the database by copying its volume.
+- Drain workers with SIGTERM; leases and recovery handle interrupted attempts.
+- Monitor readiness, error rate, expired leases, retry count, queue delay, and database saturation.
+- Rotate Relay, OpenAI, and MCP keys independently.
+
+See [the threat model](threat-model.md), [architecture](architecture.md), and [OpenAPI contract](openapi.yaml).
