@@ -31,6 +31,7 @@ type Config struct {
 	MCPConfigFile       string
 	PricingFile         string
 	APIKey              string
+	RateLimitPerMinute  int
 }
 
 func Load() (Config, error) {
@@ -91,7 +92,16 @@ func Load() (Config, error) {
 		ModelTimeout:        modelTimeout,
 		MCPConfigFile:       stringEnv("RELAY_MCP_CONFIG_FILE", ""),
 		PricingFile:         stringEnv("RELAY_PRICING_FILE", ""),
+		RateLimitPerMinute:  600,
 	}
+	rateLimit, err := int64Env("RELAY_RATE_LIMIT_PER_MINUTE", 600)
+	if err != nil {
+		return Config{}, err
+	}
+	if rateLimit < 1 || rateLimit > 100000 {
+		return Config{}, errors.New("RELAY_RATE_LIMIT_PER_MINUTE must be between 1 and 100000")
+	}
+	cfg.RateLimitPerMinute = int(rateLimit)
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")
 	}

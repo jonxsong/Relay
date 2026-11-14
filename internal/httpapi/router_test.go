@@ -90,6 +90,39 @@ func TestProductionRequiresBearerAuthentication(t *testing.T) {
 	}
 }
 
+func TestRateLimitReturnsRetryMetadata(t *testing.T) {
+	t.Parallel()
+	router := NewRouter(Dependencies{Readiness: fakeReadiness{}, Workflows: fakeWorkflows{}, DevelopmentUser: uuid.New(), MaxRequestBytes: 1024, RateLimitPerMinute: 1})
+
+	first := httptest.NewRecorder()
+	router.ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil))
+	if first.Code != http.StatusOK {
+		t.Fatalf("first status = %d", first.Code)
+	}
+	second := httptest.NewRecorder()
+	router.ServeHTTP(second, httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil))
+	if second.Code != http.StatusTooManyRequests {
+		t.Fatalf("second status = %d, want %d", second.Code, http.StatusTooManyRequests)
+	}
+	if second.Header().Get("Retry-After") == "" || second.Header().Get("X-RateLimit-Reset") == "" {
+		t.Fatal("rate limit response is missing retry metadata")
+	}
+}
+
+func TestMetricsEndpoint(t *testing.T) {
+	t.Parallel()
+	router := NewRouter(Dependencies{Readiness: fakeReadiness{}, Workflows: fakeWorkflows{}, DevelopmentUser: uuid.New(), MaxRequestBytes: 1024})
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d", response.Code)
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("relay_http_requests_total")) {
+		t.Fatal("metrics response does not contain Relay HTTP metrics")
+	}
+}
+
 func TestCreateWorkflowRejectsUnknownFields(t *testing.T) {
 	t.Parallel()
 	router := NewRouter(Dependencies{Readiness: fakeReadiness{}, Workflows: fakeWorkflows{}, DevelopmentUser: uuid.New(), MaxRequestBytes: 4096})

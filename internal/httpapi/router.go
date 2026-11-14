@@ -2,17 +2,24 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
+	"github.com/jonxsong/Relay/internal/telemetry"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type ReadinessChecker interface {
@@ -20,13 +27,14 @@ type ReadinessChecker interface {
 }
 
 type Dependencies struct {
-	Readiness       ReadinessChecker
-	Workflows       WorkflowRepository
-	Runs            RunRepository
-	DevelopmentUser uuid.UUID
-	MaxRequestBytes int64
-	Environment     string
-	APIKey          string
+	Readiness          ReadinessChecker
+	Workflows          WorkflowRepository
+	Runs               RunRepository
+	DevelopmentUser    uuid.UUID
+	MaxRequestBytes    int64
+	Environment        string
+	APIKey             string
+	RateLimitPerMinute int
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -38,6 +46,11 @@ func NewRouter(deps Dependencies) http.Handler {
 	router.Use(recoverer)
 	router.Use(requestTimeout(30 * time.Second))
 	router.Use(maxBodyBytes(deps.MaxRequestBytes))
+	router.Use(telemetry.HTTPMetrics)
+	if deps.RateLimitPerMinute > 0 {
+		router.Use(rateLimit(deps.RateLimitPerMinute, time.Minute))
+	}
+	router.Handle("/metrics", promhttp.Handler())
 
 	router.Route("/api/v1", func(api chi.Router) {
 		api.Get("/health/live", func(w http.ResponseWriter, _ *http.Request) {
@@ -58,6 +71,50 @@ func NewRouter(deps Dependencies) http.Handler {
 		writeError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed", nil)
 	})
 	return router
+}
+
+type requestWindow struct {
+	count   int
+	resetAt time.Time
+}
+
+func rateLimit(limit int, window time.Duration) func(http.Handler) http.Handler {
+	var mu sync.Mutex
+	clients := make(map[string]requestWindow)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			now := time.Now()
+			client := r.RemoteAddr
+			if authorization := r.Header.Get("Authorization"); authorization != "" {
+				digest := sha256.Sum256([]byte(authorization))
+				client = hex.EncodeToString(digest[:])
+			}
+			if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+				if r.Header.Get("Authorization") == "" {
+					client = host
+				}
+			}
+			mu.Lock()
+			entry := clients[client]
+			if entry.resetAt.IsZero() || !now.Before(entry.resetAt) {
+				entry = requestWindow{resetAt: now.Add(window)}
+			}
+			entry.count++
+			clients[client] = entry
+			remaining := max(0, limit-entry.count)
+			mu.Unlock()
+
+			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(limit))
+			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
+			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(entry.resetAt.Unix(), 10))
+			if entry.count > limit {
+				w.Header().Set("Retry-After", strconv.Itoa(max(1, int(time.Until(entry.resetAt).Seconds()))))
+				writeError(w, r, http.StatusTooManyRequests, "rate_limited", "request rate limit exceeded", nil)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func authentication(environment, apiKey string, ownerID uuid.UUID) func(http.Handler) http.Handler {

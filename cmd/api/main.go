@@ -46,7 +46,7 @@ func run() error {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(httpapi.Dependencies{Readiness: database, Workflows: database, Runs: database, DevelopmentUser: developmentUser.ID, MaxRequestBytes: cfg.MaxRequestBytes, Environment: cfg.Environment, APIKey: cfg.APIKey}),
+		Handler:           httpapi.NewRouter(httpapi.Dependencies{Readiness: database, Workflows: database, Runs: database, DevelopmentUser: developmentUser.ID, MaxRequestBytes: cfg.MaxRequestBytes, Environment: cfg.Environment, APIKey: cfg.APIKey, RateLimitPerMinute: cfg.RateLimitPerMinute}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		// Per-request middleware and streaming write deadlines bound writes.
