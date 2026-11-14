@@ -31,7 +31,7 @@ SELECT *
 FROM workflows
 WHERE owner_id = sqlc.arg(owner_id)
   AND deleted_at IS NULL
-  AND (sqlc.narg(before_created_at)::timestamptz IS NULL OR (created_at, id) < (sqlc.narg(before_created_at), sqlc.narg(before_id)))
+  AND (sqlc.narg(before_created_at)::timestamptz IS NULL OR (created_at, id) < (sqlc.narg(before_created_at), sqlc.narg(before_id)::uuid))
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
@@ -102,7 +102,7 @@ SELECT *
 FROM workflow_runs
 WHERE owner_id = sqlc.arg(owner_id)
   AND (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status))
-  AND (sqlc.narg(before_created_at)::timestamptz IS NULL OR (created_at, id) < (sqlc.narg(before_created_at), sqlc.narg(before_id)))
+  AND (sqlc.narg(before_created_at)::timestamptz IS NULL OR (created_at, id) < (sqlc.narg(before_created_at), sqlc.narg(before_id)::uuid))
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_size);
 
@@ -138,7 +138,7 @@ UPDATE workflow_runs
 SET next_event_sequence = next_event_sequence + 1,
     updated_at = now()
 WHERE id = sqlc.arg(run_id)
-RETURNING next_event_sequence - 1 AS sequence;
+RETURNING (next_event_sequence - 1)::bigint AS sequence;
 
 -- name: AppendExecutionEvent :one
 INSERT INTO execution_events (run_id, sequence, event_type, node_run_id, attempt_id, payload)

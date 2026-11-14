@@ -12,7 +12,7 @@ import (
 )
 
 type Querier interface {
-	AllocateEventSequence(ctx context.Context, runID uuid.UUID) (int32, error)
+	AllocateEventSequence(ctx context.Context, runID uuid.UUID) (int64, error)
 	AppendExecutionEvent(ctx context.Context, arg AppendExecutionEventParams) (ExecutionEvent, error)
 	CancelInactiveNodes(ctx context.Context, runID uuid.UUID) (int64, error)
 	ClaimNodeAttempt(ctx context.Context, arg ClaimNodeAttemptParams) (NodeAttempt, error)

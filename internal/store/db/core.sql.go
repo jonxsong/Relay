@@ -17,12 +17,12 @@ UPDATE workflow_runs
 SET next_event_sequence = next_event_sequence + 1,
     updated_at = now()
 WHERE id = $1
-RETURNING next_event_sequence - 1 AS sequence
+RETURNING (next_event_sequence - 1)::bigint AS sequence
 `
 
-func (q *Queries) AllocateEventSequence(ctx context.Context, runID uuid.UUID) (int32, error) {
+func (q *Queries) AllocateEventSequence(ctx context.Context, runID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, allocateEventSequence, runID)
-	var sequence int32
+	var sequence int64
 	err := row.Scan(&sequence)
 	return sequence, err
 }
@@ -636,7 +636,7 @@ SELECT id, workflow_version_id, owner_id, status, input, output, error_code, err
 FROM workflow_runs
 WHERE owner_id = $1
   AND ($2::text IS NULL OR status = $2)
-  AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4))
+  AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4::uuid))
 ORDER BY created_at DESC, id DESC
 LIMIT $5
 `
@@ -645,7 +645,7 @@ type ListRunsParams struct {
 	OwnerID         uuid.UUID          `json:"owner_id"`
 	Status          *string            `json:"status"`
 	BeforeCreatedAt pgtype.Timestamptz `json:"before_created_at"`
-	BeforeID        pgtype.Timestamptz `json:"before_id"`
+	BeforeID        pgtype.UUID        `json:"before_id"`
 	PageSize        int32              `json:"page_size"`
 }
 
@@ -697,7 +697,7 @@ SELECT id, owner_id, name, description, created_at, updated_at, deleted_at
 FROM workflows
 WHERE owner_id = $1
   AND deleted_at IS NULL
-  AND ($2::timestamptz IS NULL OR (created_at, id) < ($2, $3))
+  AND ($2::timestamptz IS NULL OR (created_at, id) < ($2, $3::uuid))
 ORDER BY created_at DESC, id DESC
 LIMIT $4
 `
@@ -705,7 +705,7 @@ LIMIT $4
 type ListWorkflowsParams struct {
 	OwnerID         uuid.UUID          `json:"owner_id"`
 	BeforeCreatedAt pgtype.Timestamptz `json:"before_created_at"`
-	BeforeID        pgtype.Timestamptz `json:"before_id"`
+	BeforeID        pgtype.UUID        `json:"before_id"`
 	PageSize        int32              `json:"page_size"`
 }
 
