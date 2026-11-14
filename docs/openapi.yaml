@@ -1,0 +1,511 @@
+openapi: 3.1.0
+info:
+  title: Relay API
+  version: 0.1.0
+  description: Durable workflow execution API for Relay.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Health
+    description: Process and dependency probes.
+  - name: Workflows
+    description: Immutable-versioned workflow definitions.
+  - name: Runs
+    description: Durable executions, nodes, events, and usage.
+paths:
+  /health/live:
+    get:
+      summary: Check process liveness
+      tags: [Health]
+      operationId: getLiveness
+      security: []
+      responses:
+        "200":
+          description: Process is alive.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Health"}
+  /health/ready:
+    get:
+      summary: Check dependency readiness
+      tags: [Health]
+      operationId: getReadiness
+      security: []
+      responses:
+        "200":
+          description: Required dependencies are ready.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Health"}
+        "503": {$ref: "#/components/responses/ServiceUnavailable"}
+  /workflows:
+    get:
+      summary: List workflows
+      tags: [Workflows]
+      operationId: listWorkflows
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Workflows owned by the authenticated user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: "#/components/schemas/Workflow"}
+                  next_cursor:
+                    type: [string, "null"]
+        "401": {$ref: "#/components/responses/Unauthorized"}
+    post:
+      summary: Create a workflow
+      tags: [Workflows]
+      operationId: createWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CreateWorkflowRequest"}
+      responses:
+        "201":
+          description: Workflow and immutable version 1 created.
+          headers:
+            Location:
+              schema: {type: string}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Workflow"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "422": {$ref: "#/components/responses/ValidationFailed"}
+  /workflows/{workflowId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkflowId"
+    get:
+      summary: Get a workflow
+      tags: [Workflows]
+      operationId: getWorkflow
+      responses:
+        "200":
+          description: Workflow with its latest immutable version.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Workflow"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /workflows/{workflowId}/versions:
+    parameters:
+      - $ref: "#/components/parameters/WorkflowId"
+    post:
+      summary: Create an immutable workflow version
+      tags: [Workflows]
+      operationId: createWorkflowVersion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [definition]
+              properties:
+                definition: {$ref: "#/components/schemas/WorkflowDefinition"}
+      responses:
+        "201":
+          description: Immutable workflow version created.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/WorkflowVersion"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "422": {$ref: "#/components/responses/ValidationFailed"}
+  /workflows/{workflowId}/runs:
+    parameters:
+      - $ref: "#/components/parameters/WorkflowId"
+    post:
+      summary: Submit a workflow run
+      tags: [Runs]
+      operationId: submitRun
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 255}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SubmitRunRequest"}
+      responses:
+        "202":
+          description: Run accepted. Replays return the original run.
+          headers:
+            Location:
+              schema: {type: string}
+            Idempotency-Replayed:
+              schema: {type: string, enum: ["true"]}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Run"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/ValidationFailed"}
+  /runs:
+    get:
+      summary: List runs
+      tags: [Runs]
+      operationId: listRuns
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - name: status
+          in: query
+          schema: {$ref: "#/components/schemas/RunStatus"}
+      responses:
+        "200":
+          description: Runs owned by the authenticated user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: "#/components/schemas/Run"}
+                  next_cursor:
+                    type: [string, "null"]
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /runs/{runId}:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      summary: Get a run
+      tags: [Runs]
+      operationId: getRun
+      responses:
+        "200":
+          description: Run state.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Run"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /runs/{runId}/nodes:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      summary: List run nodes
+      tags: [Runs]
+      operationId: listRunNodes
+      responses:
+        "200":
+          description: Durable node states and dependencies.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: "#/components/schemas/NodeRun"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /runs/{runId}/events:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      summary: Replay run events
+      tags: [Runs]
+      operationId: replayRunEvents
+      parameters:
+        - name: after
+          in: query
+          schema: {type: integer, format: int64, minimum: 0, default: 0}
+      responses:
+        "200":
+          description: Events after the requested sequence.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: "#/components/schemas/ExecutionEvent"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /runs/{runId}/stream:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      summary: Stream live run events
+      tags: [Runs]
+      operationId: streamRunEvents
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          schema: {type: integer, format: int64, minimum: 0}
+      responses:
+        "200":
+          description: Replayable server-sent event stream. The SSE id is the per-run sequence.
+          content:
+            text/event-stream:
+              schema: {type: string}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /runs/{runId}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      summary: Cancel a run
+      tags: [Runs]
+      operationId: cancelRun
+      responses:
+        "200":
+          description: Durable cancellation requested.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Run"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /runs/{runId}/usage:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      summary: Get run usage
+      tags: [Runs]
+      operationId: getRunUsage
+      responses:
+        "200":
+          description: Provider usage and cost totals. Cost is null when pricing is unknown.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RunUsage"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Relay API key
+      description: Required in production. Development mode injects the configured local user.
+  parameters:
+    PageSize:
+      name: page_size
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    WorkflowId:
+      name: workflowId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  responses:
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+    NotFound:
+      description: Resource is absent or not owned by the authenticated user.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+    Conflict:
+      description: Request conflicts with durable state or an idempotency key payload.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+    ValidationFailed:
+      description: The request or workflow definition failed validation.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+    ServiceUnavailable:
+      description: Required dependencies are not ready.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: {type: string, enum: [ok, ready]}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            details: {}
+    Workflow:
+      type: object
+      required: [id, name, description, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        version: {$ref: "#/components/schemas/WorkflowVersion"}
+    WorkflowVersion:
+      type: object
+      required: [id, workflow_id, version, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        workflow_id: {type: string, format: uuid}
+        version: {type: integer, format: int32, minimum: 1}
+        created_at: {type: string, format: date-time}
+        definition: {$ref: "#/components/schemas/WorkflowDefinition"}
+    CreateWorkflowRequest:
+      type: object
+      additionalProperties: false
+      required: [name, definition]
+      properties:
+        name: {type: string, minLength: 1}
+        description: {type: string}
+        definition: {$ref: "#/components/schemas/WorkflowDefinition"}
+    WorkflowDefinition:
+      type: object
+      additionalProperties: false
+      required: [nodes]
+      properties:
+        name: {type: string}
+        nodes:
+          type: array
+          minItems: 1
+          maxItems: 250
+          items: {$ref: "#/components/schemas/NodeDefinition"}
+    NodeDefinition:
+      type: object
+      additionalProperties: false
+      required: [id, type]
+      properties:
+        id:
+          type: string
+          pattern: "^[A-Za-z][A-Za-z0-9_-]{0,127}$"
+        type: {$ref: "#/components/schemas/NodeType"}
+        depends_on:
+          type: array
+          uniqueItems: true
+          items: {type: string}
+        inputs:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/InputBinding"
+    InputBinding:
+      type: object
+      additionalProperties: false
+      properties:
+        value: {}
+        from:
+          type: string
+          description: Restricted JSON path rooted at $.input or $.nodes.<node>.output.
+    SubmitRunRequest:
+      type: object
+      additionalProperties: false
+      required: [input]
+      properties:
+        input: {type: object}
+        cost_budget_microusd: {type: integer, format: int64, minimum: 0}
+        deadline: {type: string, format: date-time}
+    Run:
+      type: object
+      required: [id, workflow_version_id, status, input, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        workflow_version_id: {type: string, format: uuid}
+        status: {$ref: "#/components/schemas/RunStatus"}
+        input: {type: object}
+        output: {}
+        error_code: {type: [string, "null"]}
+        error_message: {type: [string, "null"]}
+        created_at: {type: string, format: date-time}
+        started_at: {type: [string, "null"], format: date-time}
+        completed_at: {type: [string, "null"], format: date-time}
+    NodeRun:
+      type: object
+      required: [id, node_key, node_type, status, current_attempt_no, depends_on]
+      properties:
+        id: {type: string, format: uuid}
+        node_key: {type: string}
+        node_type: {$ref: "#/components/schemas/NodeType"}
+        status: {$ref: "#/components/schemas/NodeStatus"}
+        current_attempt_no: {type: integer, format: int32, minimum: 0}
+        depends_on:
+          type: array
+          items: {type: string}
+        output: {}
+        error_code: {type: [string, "null"]}
+        error_message: {type: [string, "null"]}
+    ExecutionEvent:
+      type: object
+      required: [id, sequence, event_type, payload, occurred_at]
+      properties:
+        id: {type: string, format: uuid}
+        sequence: {type: integer, format: int64, minimum: 1}
+        event_type: {type: string}
+        node_run_id: {type: [string, "null"], format: uuid}
+        attempt_id: {type: [string, "null"], format: uuid}
+        payload: {type: object}
+        occurred_at: {type: string, format: date-time}
+    UsageRecord:
+      type: object
+      required: [id, provider, model, recorded_at]
+      properties:
+        id: {type: string, format: uuid}
+        node_attempt_id: {type: [string, "null"], format: uuid}
+        provider: {type: string}
+        model: {type: string}
+        pricing_version: {type: [string, "null"]}
+        input_tokens: {type: [integer, "null"], format: int64, minimum: 0}
+        output_tokens: {type: [integer, "null"], format: int64, minimum: 0}
+        cost_microusd: {type: [integer, "null"], format: int64, minimum: 0}
+        recorded_at: {type: string, format: date-time}
+    RunUsage:
+      type: object
+      required: [items, totals]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/UsageRecord"}
+        totals:
+          type: object
+          required: [input_tokens, output_tokens, cost_microusd]
+          properties:
+            input_tokens: {type: integer, format: int64, minimum: 0}
+            output_tokens: {type: integer, format: int64, minimum: 0}
+            cost_microusd: {type: [integer, "null"], format: int64, minimum: 0}
+    RunStatus:
+      type: string
+      enum: [pending, running, succeeded, failed, cancelled]
+    NodeStatus:
+      type: string
+      enum: [pending, ready, queued, running, succeeded, failed, cancelled, skipped]
+    NodeType:
+      type: string
+      enum: [llm, tool, transform, join]
