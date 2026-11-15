@@ -1,8 +1,18 @@
 import { expect, test } from "@playwright/test";
 
+test("connects the public landing page to the operator console", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /Run agents like production systems/ })).toBeVisible();
+  const consoleLink = page.getByRole("link", { name: /Launch operator console/ });
+  await expect(consoleLink).toHaveAttribute("href", "/console");
+  await consoleLink.click();
+  await expect(page).toHaveURL(/\/console$/);
+  await expect(page.getByRole("heading", { name: "Execution overview" })).toBeVisible();
+});
+
 test("creates, executes, inspects, and cancels a workflow", async ({ page }) => {
   const workflowName = `browser-${Date.now()}`;
-  await page.goto("/");
+  await page.goto("/console");
   await expect(page.getByRole("heading", { name: "Execution overview" })).toBeVisible();
   const apiKey = process.env.RELAY_E2E_API_KEY;
   if (apiKey) {
