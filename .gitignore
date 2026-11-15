@@ -3,6 +3,7 @@
 !.env.example
 OPENAI_API_KEY.txt
 RENDER_API_KEY.txt
+RELAY_ACCESS_KEY.txt
 status-site-live/
 
 # Go
