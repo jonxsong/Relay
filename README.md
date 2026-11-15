@@ -10,7 +10,7 @@
   [![NATS](https://img.shields.io/badge/NATS-JetStream-27AAE1?logo=natsdotio&logoColor=white)](https://nats.io/)
   [![License](https://img.shields.io/badge/license-Apache--2.0-7C3AED)](LICENSE)
 
-  **[Launch the public console →](https://relay.jonzhang.dev)**
+  **[Visit Relay →](https://relay.jonzhang.dev)** · **[Open the console →](https://relay.jonzhang.dev/console)**
 </div>
 
 > [!IMPORTANT]
@@ -28,7 +28,7 @@ Relay is not a marketing page or a passive agent monitor. It is the operator con
 - Inspect node state, retries, event history, tokens, and known cost.
 - Cancel work durably without pretending remote side effects are exactly-once.
 
-The production operator console is live at **[relay.jonzhang.dev](https://relay.jonzhang.dev)**. The separate [build-status site](https://relay-build-status.perkyaisle4.chatgpt.site) records the public build and release milestones.
+The product site is live at **[relay.jonzhang.dev](https://relay.jonzhang.dev)** and leads directly into the secured **[operator console](https://relay.jonzhang.dev/console)**. The separate [build-status site](https://relay-build-status.perkyaisle4.chatgpt.site) records the public build and release milestones.
 
 ## Why Relay
 
@@ -61,7 +61,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open the console at [http://localhost:3000](http://localhost:3000), then verify the API:
+Open the product site at [http://localhost:3000](http://localhost:3000) or go directly to the console at [http://localhost:3000/console](http://localhost:3000/console), then verify the API:
 
 ```bash
 curl http://localhost:8080/api/v1/health/ready
