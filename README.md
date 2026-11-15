@@ -9,6 +9,8 @@
   [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17+-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
   [![NATS](https://img.shields.io/badge/NATS-JetStream-27AAE1?logo=natsdotio&logoColor=white)](https://nats.io/)
   [![License](https://img.shields.io/badge/license-Apache--2.0-7C3AED)](LICENSE)
+
+  **[Launch the public console →](https://relay.jonzhang.dev)**
 </div>
 
 > [!IMPORTANT]
@@ -26,7 +28,7 @@ Relay is not a marketing page or a passive agent monitor. It is the operator con
 - Inspect node state, retries, event history, tokens, and known cost.
 - Cancel work durably without pretending remote side effects are exactly-once.
 
-The separate [build-status site](https://relay-build-status.perkyaisle4.chatgpt.site) reports project progress only. The Relay console itself is served by this repository and is the application intended for `relay.jonzhang.dev`.
+The production operator console is live at **[relay.jonzhang.dev](https://relay.jonzhang.dev)**. The separate [build-status site](https://relay-build-status.perkyaisle4.chatgpt.site) records the public build and release milestones.
 
 ## Why Relay
 
