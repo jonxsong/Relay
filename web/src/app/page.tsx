@@ -13,16 +13,16 @@ export const metadata: Metadata = {
 };
 
 const capabilities = [
-  { icon: GitBranch, number: "01", title: "Define the graph", copy: "Author immutable DAGs composed of model, tool, transform, and join nodes. Relay validates the topology before any work begins.", detail: "Versioned workflows · bounded inputs" },
-  { icon: RefreshCw, number: "02", title: "Execute durably", copy: "PostgreSQL owns every transition. Leases, fencing tokens, retries, deadlines, and recovery scans keep work moving through failures.", detail: "At-least-once · stale work rejected" },
-  { icon: Activity, number: "03", title: "Operate with evidence", copy: "Watch the live DAG, inspect every attempt, replay ordered events, track token usage, and cancel active work from one console.", detail: "SSE replay · usage records" },
+  { icon: GitBranch, number: "01", title: "Define a workflow", copy: "Author immutable DAGs composed of model, tool, transform, and join nodes. Relay validates the topology before any work begins.", detail: "Versioned workflows · bounded inputs" },
+  { icon: RefreshCw, number: "02", title: "Execute nodes durably", copy: "PostgreSQL records each transition. Leases, fencing tokens, retries, deadlines, and recovery scans coordinate work across failures.", detail: "At-least-once · stale work rejected" },
+  { icon: Activity, number: "03", title: "Inspect runs and attempts", copy: "Watch the live DAG, inspect every attempt, replay ordered events, track token usage, and cancel active work from one console.", detail: "SSE replay · usage records" },
 ];
 
 const reliability = [
-  [Database, "Postgres owns reality", "The broker wakes workers up; it never decides what is true."],
-  [ShieldCheck, "Stale work cannot win", "Fencing guards every completion after a lease changes hands."],
-  [Clock3, "Failure has a clock", "Deadlines, bounded retries, and recovery scans make stuck work visible."],
-  [KeyRound, "Tools fail closed", "MCP connections require explicit allowlists, schemas, and permissions."],
+  [Database, "PostgreSQL is the source of truth", "Run state, attempts, leases, and outbox records are committed transactionally."],
+  [ShieldCheck, "Fencing rejects stale completions", "A worker cannot commit a result after its lease has been reassigned."],
+  [Clock3, "Deadlines bound failed attempts", "Bounded retries and recovery scans identify and reschedule incomplete work."],
+  [KeyRound, "MCP tools require explicit access", "Connections use configured allowlists, schemas, and permissions."],
 ] as const;
 
 export default function Home() {
@@ -42,14 +42,14 @@ export default function Home() {
 
       <section className="landing-hero">
         <div className="landing-hero-copy">
-          <div className="landing-eyebrow"><span><i />PUBLIC BETA</span><b>BUILT FOR FAILURE</b></div>
-          <h1>Run agents like<br /><em>production systems.</em></h1>
-          <p>Relay turns an immutable workflow graph into durable, inspectable execution—so retries, crashes, costs, and tool calls are operational facts instead of hidden prompt logic.</p>
+          <div className="landing-eyebrow"><span><i />OPEN SOURCE</span><b>AI AGENT EXECUTION ENGINE</b></div>
+          <h1>Durable execution for AI agent workflows</h1>
+          <p>Relay executes versioned workflow DAGs with leased workers, bounded retries, and replayable events. Operators can inspect every run, node attempt, model call, tool call, and usage record from one console.</p>
           <div className="landing-hero-actions">
-            <Link className="landing-primary" href="/console">Launch operator console <ArrowRight size={17} /></Link>
-            <a className="landing-secondary" href="#architecture">See how it works <Route size={16} /></a>
+            <Link className="landing-primary" href="/console">Open operator console <ArrowRight size={17} /></Link>
+            <a className="landing-secondary" href="#architecture">Review the architecture <Route size={16} /></a>
           </div>
-          <div className="landing-proof-row"><span><Check size={14} />Open source</span><span><Check size={14} />Real OpenAI execution</span><span><Check size={14} />No fake metrics</span></div>
+          <div className="landing-proof-row"><span><Check size={14} />Apache-2.0</span><span><Check size={14} />OpenAI Responses API</span><span><Check size={14} />PostgreSQL durable state</span></div>
         </div>
 
         <div className="landing-engine-preview" aria-label="Illustrative Relay execution graph">
@@ -75,12 +75,12 @@ export default function Home() {
       </section>
 
       <section className="landing-section landing-product" id="product">
-        <div className="landing-section-heading"><div><span className="landing-kicker">THE PRODUCT</span><h2>Orchestration is easy.<br /><em>Operations are the product.</em></h2></div><p>Relay provides the control plane between a workflow definition and the unreliable world it has to survive. Every stage is visible in the same operator experience.</p></div>
+        <div className="landing-section-heading"><div><span className="landing-kicker">EXECUTION LIFECYCLE</span><h2>Define, execute, and inspect workflows</h2></div><p>Relay manages the lifecycle from an immutable workflow definition to durable node execution. The console exposes the current state and complete event history for each run.</p></div>
         <div className="landing-capability-grid">{capabilities.map(({ icon: Icon, number, title, copy, detail }) => <article key={number}><header><span>{number}</span><Icon size={21} /></header><h3>{title}</h3><p>{copy}</p><footer>{detail}</footer></article>)}</div>
       </section>
 
       <section className="landing-section landing-architecture" id="architecture">
-        <div className="landing-section-heading compact"><div><span className="landing-kicker">SYSTEM MAP</span><h2>One durable decision.<br /><em>Many recoverable steps.</em></h2></div><p>State moves through explicit boundaries. Solid paths commit authority; dashed paths notify replaceable workers.</p></div>
+        <div className="landing-section-heading compact"><div><span className="landing-kicker">ARCHITECTURE</span><h2>PostgreSQL coordinates durable state</h2></div><p>PostgreSQL commits workflow state and publishes dispatch records through an outbox. JetStream delivers notifications to replaceable workers, while fencing tokens protect committed results.</p></div>
         <div className="landing-architecture-map">
           <div className="architecture-lane request-lane"><span className="architecture-label">REQUEST</span><div className="architecture-box"><Workflow size={22} /><span><strong>Console + API</strong><small>validate · authenticate</small></span></div></div>
           <div className="architecture-arrow"><span>1</span><i /></div>
@@ -95,14 +95,14 @@ export default function Home() {
       </section>
 
       <section className="landing-section landing-reliability" id="reliability">
-        <div className="landing-section-heading compact"><div><span className="landing-kicker">RELIABILITY CONTRACT</span><h2>No distributed-systems<br /><em>fan fiction.</em></h2></div><p>Relay is explicit about what it guarantees—and what no orchestrator can guarantee for arbitrary external effects.</p></div>
+        <div className="landing-section-heading compact"><div><span className="landing-kicker">RELIABILITY CONTRACT</span><h2>Reliability guarantees and limitations</h2></div><p>Relay provides at-least-once execution with duplicate-safe internal state transitions. External systems remain subject to their own delivery and idempotency behavior.</p></div>
         <div className="landing-reliability-grid">{reliability.map(([Icon, title, copy], index) => <article key={title}><span>0{index + 1}</span><Icon size={21} /><h3>{title}</h3><p>{copy}</p></article>)}</div>
-        <div className="landing-contract-note"><ShieldCheck size={18} /><p><strong>Honest boundary:</strong> Relay provides at-least-once delivery and duplicate-safe internal transitions. External side effects still need idempotency keys or compensating actions.</p></div>
+        <div className="landing-contract-note"><ShieldCheck size={18} /><p><strong>External side effects:</strong> Calls that modify another system require idempotency keys or compensating actions to handle duplicate execution safely.</p></div>
       </section>
 
-      <section className="landing-final-cta"><div><span className="landing-kicker">THE ENGINE IS LIVE</span><h2>See the workflow.<br /><em>See the truth.</em></h2></div><div><p>Open the secured operator console to create a workflow, execute it through OpenAI, and inspect every durable transition.</p><Link className="landing-primary" href="/console">Enter the console <ArrowRight size={17} /></Link></div></section>
+      <section className="landing-final-cta"><div><span className="landing-kicker">OPERATOR CONSOLE</span><h2>Create and monitor a workflow</h2></div><div><p>Use the console to define a DAG, submit a run, execute model and MCP tool nodes, and review attempts, events, and usage.</p><Link className="landing-primary" href="/console">Open operator console <ArrowRight size={17} /></Link></div></section>
 
-      <footer className="landing-footer"><Link className="landing-brand" href="/"><Image src="/relay-mark.svg" width={36} height={36} alt="" /><span><strong>Relay</strong><small>Durable agent execution</small></span></Link><p>Apache-2.0 · Built in public · <a href="https://github.com/jonxsong/Relay" target="_blank" rel="noreferrer">Source on GitHub</a></p><Link href="/console">Operator console <ArrowRight size={14} /></Link></footer>
+      <footer className="landing-footer"><Link className="landing-brand" href="/"><Image src="/relay-mark.svg" width={36} height={36} alt="" /><span><strong>Relay</strong><small>Durable agent execution</small></span></Link><p>Apache-2.0 · <a href="https://github.com/jonxsong/Relay" target="_blank" rel="noreferrer">Source on GitHub</a></p><Link href="/console">Operator console <ArrowRight size={14} /></Link></footer>
     </main>
   );
 }

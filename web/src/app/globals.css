@@ -348,7 +348,6 @@ button.run-row.selected { box-shadow: inset 2px 0 var(--purple); }
 .landing-eyebrow i { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 12px rgba(74,222,128,.65); }
 .landing-eyebrow b { color: #686c80; font-weight: 700; }
 .landing-hero h1 { margin: 25px 0 25px; font-size: clamp(50px, 5.4vw, 76px); line-height: .98; letter-spacing: -.06em; }
-.landing-hero h1 em, .landing-section-heading h2 em, .landing-final-cta h2 em { color: #aaa0ff; font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
 .landing-hero-copy > p { max-width: 580px; margin: 0; color: #adb0c0; font-size: 16px; line-height: 1.75; }
 .landing-hero-actions { display: flex; align-items: center; gap: 11px; margin-top: 31px; }
 .landing-primary, .landing-secondary { height: 43px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 0 17px; border-radius: 9px; text-decoration: none; font-size: 11px; font-weight: 750; }

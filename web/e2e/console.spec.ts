@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 
 test("connects the public landing page to the operator console", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /Run agents like production systems/ })).toBeVisible();
-  const consoleLink = page.getByRole("link", { name: /Launch operator console/ });
+  await expect(page.getByRole("heading", { name: "Durable execution for AI agent workflows" })).toBeVisible();
+  const consoleLink = page.getByRole("link", { name: /Open operator console/ }).first();
   await expect(consoleLink).toHaveAttribute("href", "/console");
   await consoleLink.click();
   await expect(page).toHaveURL(/\/console$/);
