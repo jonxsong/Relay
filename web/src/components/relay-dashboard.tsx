@@ -4,12 +4,13 @@ import {
   Activity, BarChart3, Blocks, Bot, Boxes, Braces, ChevronDown,
   CircleDollarSign, Clock3, Database, GitBranch, LayoutDashboard,
   Ban, KeyRound, ListFilter, Play, Plus, RefreshCw, RotateCcw, Search, Settings,
-  ShieldCheck, Workflow as WorkflowIcon, Wrench, X, Zap,
+  ShieldCheck, Workflow as WorkflowIcon, Wrench, X,
 } from "lucide-react";
 import {
   Background, Controls, Handle, MiniMap, Position, ReactFlow,
   type Edge, type Node, type NodeProps, type NodeTypes,
 } from "@xyflow/react";
+import Image from "next/image";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import {
@@ -434,7 +435,7 @@ export function RelayDashboard() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="product-lockup"><div className="product-mark"><Zap size={22} /></div><div><strong>Relay</strong><span>Agent Execution Engine</span></div></div>
+        <div className="product-lockup"><div className="product-mark"><Image src="/relay-mark.svg" width={38} height={38} alt="" priority /></div><div><strong>Relay</strong><span>Agent Execution Engine</span></div></div>
         <nav aria-label="Primary navigation">{nav.map(([view, Icon, label]) => <button className={activeView === view ? "active" : ""} key={label} onClick={() => setActiveView(view)}><Icon size={17} /><span>{label}</span>{label === "Runs" && runs.length > 0 ? <b>{runs.length}</b> : null}</button>)}</nav>
         <div className="sidebar-section"><span>RUNTIME</span><button onClick={() => setActiveView("connections")}><Database size={17} /><span>PostgreSQL</span><i className={connection === "live" ? "dot-live" : "dot-offline"} /></button><button onClick={() => setActiveView("settings")}><ShieldCheck size={17} /><span>Security</span></button></div>
         <div className="sidebar-status"><div><i className={connection === "live" ? "dot-live" : "dot-offline"} /><strong>{connection === "live" ? "Connected" : connection === "loading" ? "Connecting" : "Offline"}</strong></div><span>{updatedAt ? `Updated ${updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Waiting for backend"}</span></div>
