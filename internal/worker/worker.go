@@ -80,10 +80,18 @@ func (w *Worker) Handle(ctx context.Context, attemptID uuid.UUID) (handleErr err
 	defer cancelExecution()
 	leaseErrors := make(chan error, 1)
 	stopRenewal := make(chan struct{})
-	go w.renewLease(executionContext, claim, stopRenewal, leaseErrors, cancelExecution)
+	renewalDone := make(chan struct{})
+	go func() {
+		defer close(renewalDone)
+		w.renewLease(executionContext, claim, stopRenewal, leaseErrors, cancelExecution)
+	}()
 
 	result, executionErr := w.executor.Execute(executionContext, claim.NodeType, claim.Input)
 	close(stopRenewal)
+	// A renewal and completion both update the attempt row. Wait for any renewal
+	// already in flight before opening the serializable completion transaction;
+	// otherwise they can deterministically collide at the lease interval boundary.
+	<-renewalDone
 	select {
 	case leaseErr := <-leaseErrors:
 		if leaseErr != nil {

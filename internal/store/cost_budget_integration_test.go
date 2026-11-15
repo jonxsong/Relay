@@ -22,13 +22,14 @@ func TestIntegrationCostBudgetTerminatesRunAndFencesRemainingWork(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	t.Cleanup(database.Close)
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	user, err := database.EnsureDevelopmentUser(ctx, "budget-"+suffix+"@relay.local", "Budget Test")
 	if err != nil {
 		t.Fatal(err)
 	}
+	cleanupIntegrationOwner(t, database, user.ID)
 	workflow, err := database.CreateWorkflow(ctx, user.ID, "budget-"+suffix, "cost budget", domain.WorkflowDefinition{
 		Name: "cost budget",
 		Nodes: []domain.NodeDefinition{

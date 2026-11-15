@@ -23,13 +23,14 @@ func TestIntegrationPaginatesWorkflowsAndRunsWithoutOverlap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	t.Cleanup(database.Close)
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	user, err := database.EnsureDevelopmentUser(ctx, "pagination-"+suffix+"@relay.local", "Pagination Test")
 	if err != nil {
 		t.Fatal(err)
 	}
+	cleanupIntegrationOwner(t, database, user.ID)
 	var workflowID uuid.UUID
 	for index := 0; index < 3; index++ {
 		created, err := database.CreateWorkflow(ctx, user.ID, fmt.Sprintf("paged-%d-%s", index, suffix), "pagination", domain.WorkflowDefinition{

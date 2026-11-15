@@ -23,13 +23,14 @@ func TestIntegrationExpiresRunDeadlineAndFencesWorker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	t.Cleanup(database.Close)
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	user, err := database.EnsureDevelopmentUser(ctx, "deadline-"+suffix+"@relay.local", "Deadline Test")
 	if err != nil {
 		t.Fatal(err)
 	}
+	cleanupIntegrationOwner(t, database, user.ID)
 	workflow, err := database.CreateWorkflow(ctx, user.ID, "deadline-"+suffix, "deadline fencing", domain.WorkflowDefinition{
 		Name: "deadline fencing",
 		Nodes: []domain.NodeDefinition{{

@@ -27,7 +27,7 @@ func TestIntegrationRecoversCrashWindowAndRejectsStaleWorkers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	t.Cleanup(database.Close)
 	for {
 		drained, err := database.DispatchOutbox(ctx, 1000, func(context.Context, db.OutboxEvent) error { return nil })
 		if err != nil {
@@ -43,6 +43,7 @@ func TestIntegrationRecoversCrashWindowAndRejectsStaleWorkers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cleanupIntegrationOwner(t, database, user.ID)
 	workflow, err := database.CreateWorkflow(ctx, user.ID, "durability-"+suffix, "lease and outbox recovery", domain.WorkflowDefinition{Nodes: []domain.NodeDefinition{{
 		ID: "work", Type: domain.NodeTypeLLM, Inputs: map[string]domain.InputBinding{"prompt": {From: "$.input.prompt"}},
 	}}})
