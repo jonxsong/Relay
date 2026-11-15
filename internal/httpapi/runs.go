@@ -21,7 +21,7 @@ import (
 type RunRepository interface {
 	SubmitRun(context.Context, store.SubmitRunParams) (store.SubmittedRun, error)
 	GetRun(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowRun, error)
-	ListRuns(context.Context, uuid.UUID, *string, int32) ([]db.WorkflowRun, error)
+	ListRuns(context.Context, uuid.UUID, *string, *store.PageCursor, int32) (store.RunPage, error)
 	ListRunNodes(context.Context, uuid.UUID, uuid.UUID) ([]db.NodeRun, error)
 	ListNodeAttempts(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) ([]db.NodeAttempt, error)
 	ReplayEvents(context.Context, uuid.UUID, uuid.UUID, int64, int32) ([]db.ExecutionEvent, error)
@@ -334,6 +334,11 @@ func listRunsHandler(repository RunRepository) http.HandlerFunc {
 			writeError(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
 			return
 		}
+		cursor, err := decodePageCursor(r.URL.Query().Get("cursor"))
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_request", "cursor is invalid", nil)
+			return
+		}
 		var status *string
 		if raw := strings.TrimSpace(r.URL.Query().Get("status")); raw != "" {
 			candidate := domain.RunStatus(raw)
@@ -343,16 +348,16 @@ func listRunsHandler(repository RunRepository) http.HandlerFunc {
 			}
 			status = &raw
 		}
-		runs, err := repository.ListRuns(r.Context(), ownerID, status, pageSize)
+		page, err := repository.ListRuns(r.Context(), ownerID, status, cursor, pageSize)
 		if err != nil {
 			writeRunRepositoryError(w, r, err)
 			return
 		}
-		items := make([]runResponse, 0, len(runs))
-		for _, run := range runs {
+		items := make([]runResponse, 0, len(page.Items))
+		for _, run := range page.Items {
 			items = append(items, runFromDB(run))
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": nil})
+		writeJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": encodePageCursor(page.NextCursor)})
 	}
 }
 

@@ -174,12 +174,26 @@ func (s *Store) GetRun(ctx context.Context, ownerID, runID uuid.UUID) (db.Workfl
 	return run, nil
 }
 
-func (s *Store) ListRuns(ctx context.Context, ownerID uuid.UUID, status *string, pageSize int32) ([]db.WorkflowRun, error) {
-	runs, err := s.queries.ListRuns(ctx, db.ListRunsParams{OwnerID: ownerID, Status: status, PageSize: pageSize})
-	if err != nil {
-		return nil, fmt.Errorf("list runs: %w", err)
+func (s *Store) ListRuns(ctx context.Context, ownerID uuid.UUID, status *string, cursor *PageCursor, pageSize int32) (RunPage, error) {
+	if pageSize < 1 || pageSize > 100 {
+		return RunPage{}, errors.New("run page size must be between 1 and 100")
 	}
-	return runs, nil
+	params := db.ListRunsParams{OwnerID: ownerID, Status: status, PageSize: pageSize + 1}
+	if cursor != nil {
+		params.BeforeCreatedAt = pgtype.Timestamptz{Time: cursor.CreatedAt.UTC(), Valid: true}
+		params.BeforeID = pgtype.UUID{Bytes: cursor.ID, Valid: true}
+	}
+	runs, err := s.queries.ListRuns(ctx, params)
+	if err != nil {
+		return RunPage{}, fmt.Errorf("list runs: %w", err)
+	}
+	page := RunPage{Items: runs}
+	if len(runs) > int(pageSize) {
+		page.Items = runs[:pageSize]
+		last := page.Items[len(page.Items)-1]
+		page.NextCursor = &PageCursor{CreatedAt: last.CreatedAt.Time.UTC(), ID: last.ID}
+	}
+	return page, nil
 }
 
 func (s *Store) ListRunNodes(ctx context.Context, ownerID, runID uuid.UUID) ([]db.NodeRun, error) {

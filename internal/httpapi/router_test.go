@@ -3,12 +3,15 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jonxsong/Relay/internal/domain"
 	"github.com/jonxsong/Relay/internal/store"
 	"github.com/jonxsong/Relay/internal/store/db"
@@ -20,6 +23,7 @@ func (f fakeReadiness) Ready(context.Context) error { return f.err }
 
 type fakeWorkflows struct {
 	create func(context.Context, uuid.UUID, string, string, domain.WorkflowDefinition) (store.CreatedWorkflow, error)
+	list   func(context.Context, uuid.UUID, *store.PageCursor, int32) (store.WorkflowPage, error)
 }
 
 func (f fakeWorkflows) CreateWorkflow(ctx context.Context, owner uuid.UUID, name, description string, definition domain.WorkflowDefinition) (store.CreatedWorkflow, error) {
@@ -37,8 +41,12 @@ func (fakeWorkflows) GetWorkflow(context.Context, uuid.UUID, uuid.UUID) (db.Work
 func (fakeWorkflows) GetLatestWorkflowVersion(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowVersion, error) {
 	return db.WorkflowVersion{}, store.ErrNotFound
 }
-func (fakeWorkflows) ListWorkflows(context.Context, uuid.UUID, int32) ([]db.Workflow, error) {
-	return []db.Workflow{}, nil
+
+func (f fakeWorkflows) ListWorkflows(ctx context.Context, ownerID uuid.UUID, cursor *store.PageCursor, pageSize int32) (store.WorkflowPage, error) {
+	if f.list != nil {
+		return f.list(ctx, ownerID, cursor, pageSize)
+	}
+	return store.WorkflowPage{Items: []db.Workflow{}}, nil
 }
 
 func TestHealthEndpoints(t *testing.T) {
@@ -52,6 +60,46 @@ func TestHealthEndpoints(t *testing.T) {
 		if response.Code != http.StatusOK {
 			t.Errorf("GET %s status = %d, want %d", path, response.Code, http.StatusOK)
 		}
+	}
+}
+
+func TestWorkflowPaginationCursorRoundTrip(t *testing.T) {
+	t.Parallel()
+	ownerID := uuid.New()
+	workflowID := uuid.New()
+	createdAt := time.Date(2026, 11, 14, 23, 0, 0, 0, time.UTC)
+	repository := fakeWorkflows{list: func(_ context.Context, owner uuid.UUID, cursor *store.PageCursor, pageSize int32) (store.WorkflowPage, error) {
+		if owner != ownerID || cursor != nil || pageSize != 1 {
+			t.Fatalf("unexpected list inputs: owner=%s cursor=%+v pageSize=%d", owner, cursor, pageSize)
+		}
+		return store.WorkflowPage{
+			Items:      []db.Workflow{{ID: workflowID, OwnerID: ownerID, Name: "paged", CreatedAt: pgtype.Timestamptz{Time: createdAt, Valid: true}}},
+			NextCursor: &store.PageCursor{CreatedAt: createdAt, ID: workflowID},
+		}, nil
+	}}
+	router := NewRouter(Dependencies{Readiness: fakeReadiness{}, Workflows: repository, DevelopmentUser: ownerID, MaxRequestBytes: 4096})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/?page_size=1", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		NextCursor *string `json:"next_cursor"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || body.NextCursor == nil {
+		t.Fatalf("decode response cursor: %v, body=%s", err, response.Body.String())
+	}
+	decoded, err := decodePageCursor(*body.NextCursor)
+	if err != nil || decoded.ID != workflowID || !decoded.CreatedAt.Equal(createdAt) {
+		t.Fatalf("decoded cursor = %+v, err=%v", decoded, err)
+	}
+
+	invalid := httptest.NewRequest(http.MethodGet, "/api/v1/workflows/?cursor=not-valid", nil)
+	invalidResponse := httptest.NewRecorder()
+	router.ServeHTTP(invalidResponse, invalid)
+	if invalidResponse.Code != http.StatusBadRequest {
+		t.Fatalf("invalid cursor status = %d, want 400", invalidResponse.Code)
 	}
 }
 

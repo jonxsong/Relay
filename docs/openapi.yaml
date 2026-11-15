@@ -50,6 +50,7 @@ paths:
       operationId: listWorkflows
       parameters:
         - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
           description: Workflows owned by the authenticated user.
@@ -165,6 +166,7 @@ paths:
       operationId: listRuns
       parameters:
         - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Cursor"
         - name: status
           in: query
           schema: {$ref: "#/components/schemas/RunStatus"}
@@ -331,6 +333,11 @@ components:
       name: page_size
       in: query
       schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque continuation token returned as next_cursor by the previous page.
+      schema: {type: string, maxLength: 512}
     WorkflowId:
       name: workflowId
       in: path

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,7 +26,7 @@ type WorkflowRepository interface {
 	CreateWorkflowVersion(context.Context, uuid.UUID, uuid.UUID, domain.WorkflowDefinition) (db.WorkflowVersion, error)
 	GetWorkflow(context.Context, uuid.UUID, uuid.UUID) (db.Workflow, error)
 	GetLatestWorkflowVersion(context.Context, uuid.UUID, uuid.UUID) (db.WorkflowVersion, error)
-	ListWorkflows(context.Context, uuid.UUID, int32) ([]db.Workflow, error)
+	ListWorkflows(context.Context, uuid.UUID, *store.PageCursor, int32) (store.WorkflowPage, error)
 }
 
 type createWorkflowRequest struct {
@@ -103,16 +104,21 @@ func listWorkflowsHandler(repository WorkflowRepository) http.HandlerFunc {
 			writeError(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
 			return
 		}
-		workflows, err := repository.ListWorkflows(r.Context(), ownerID, pageSize)
+		cursor, err := decodePageCursor(r.URL.Query().Get("cursor"))
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "invalid_request", "cursor is invalid", nil)
+			return
+		}
+		page, err := repository.ListWorkflows(r.Context(), ownerID, cursor, pageSize)
 		if err != nil {
 			writeRepositoryError(w, r, err)
 			return
 		}
-		items := make([]workflowResponse, 0, len(workflows))
-		for _, workflow := range workflows {
+		items := make([]workflowResponse, 0, len(page.Items))
+		for _, workflow := range page.Items {
 			items = append(items, workflowFromDB(workflow))
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": nil})
+		writeJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": encodePageCursor(page.NextCursor)})
 	}
 }
 
@@ -200,6 +206,44 @@ func boundedPageSize(raw string) (int32, error) {
 		return 0, errors.New("page_size must be an integer between 1 and 100")
 	}
 	return int32(value), nil
+}
+
+type opaquePageCursor struct {
+	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID `json:"id"`
+}
+
+func encodePageCursor(cursor *store.PageCursor) *string {
+	if cursor == nil {
+		return nil
+	}
+	payload, err := json.Marshal(opaquePageCursor{CreatedAt: cursor.CreatedAt.UTC(), ID: cursor.ID})
+	if err != nil {
+		return nil
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(payload)
+	return &encoded
+}
+
+func decodePageCursor(raw string) (*store.PageCursor, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil || len(payload) > 512 {
+		return nil, errors.New("invalid cursor encoding")
+	}
+	var cursor opaquePageCursor
+	decoder := json.NewDecoder(strings.NewReader(string(payload)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&cursor); err != nil || cursor.CreatedAt.IsZero() || cursor.ID == uuid.Nil {
+		return nil, errors.New("invalid cursor payload")
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return nil, errors.New("invalid cursor payload")
+	}
+	return &store.PageCursor{CreatedAt: cursor.CreatedAt.UTC(), ID: cursor.ID}, nil
 }
 
 func writeRepositoryError(w http.ResponseWriter, r *http.Request, err error) {

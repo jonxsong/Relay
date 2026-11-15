@@ -33,8 +33,8 @@ func (f fakeRuns) GetRun(ctx context.Context, ownerID, runID uuid.UUID) (db.Work
 	}
 	return db.WorkflowRun{}, store.ErrNotFound
 }
-func (fakeRuns) ListRuns(context.Context, uuid.UUID, *string, int32) ([]db.WorkflowRun, error) {
-	return []db.WorkflowRun{}, nil
+func (fakeRuns) ListRuns(context.Context, uuid.UUID, *string, *store.PageCursor, int32) (store.RunPage, error) {
+	return store.RunPage{Items: []db.WorkflowRun{}}, nil
 }
 func (fakeRuns) ListRunNodes(context.Context, uuid.UUID, uuid.UUID) ([]db.NodeRun, error) {
 	return []db.NodeRun{}, nil

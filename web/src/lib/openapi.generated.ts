@@ -498,6 +498,8 @@ export interface components {
     };
     parameters: {
         readonly PageSize: number;
+        /** @description Opaque continuation token returned as next_cursor by the previous page. */
+        readonly Cursor: string;
         readonly WorkflowId: string;
         readonly RunId: string;
     };
@@ -552,6 +554,8 @@ export interface operations {
         readonly parameters: {
             readonly query?: {
                 readonly page_size?: components["parameters"]["PageSize"];
+                /** @description Opaque continuation token returned as next_cursor by the previous page. */
+                readonly cursor?: components["parameters"]["Cursor"];
             };
             readonly header?: never;
             readonly path?: never;
@@ -694,6 +698,8 @@ export interface operations {
         readonly parameters: {
             readonly query?: {
                 readonly page_size?: components["parameters"]["PageSize"];
+                /** @description Opaque continuation token returned as next_cursor by the previous page. */
+                readonly cursor?: components["parameters"]["Cursor"];
                 readonly status?: components["schemas"]["RunStatus"];
             };
             readonly header?: never;

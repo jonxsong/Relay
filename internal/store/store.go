@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jonxsong/Relay/internal/domain"
 	"github.com/jonxsong/Relay/internal/store/db"
@@ -172,12 +173,26 @@ func (s *Store) GetRunDefinition(ctx context.Context, ownerID, runID uuid.UUID) 
 	return definition, nil
 }
 
-func (s *Store) ListWorkflows(ctx context.Context, ownerID uuid.UUID, pageSize int32) ([]db.Workflow, error) {
-	workflows, err := s.queries.ListWorkflows(ctx, db.ListWorkflowsParams{OwnerID: ownerID, PageSize: pageSize})
-	if err != nil {
-		return nil, fmt.Errorf("list workflows: %w", err)
+func (s *Store) ListWorkflows(ctx context.Context, ownerID uuid.UUID, cursor *PageCursor, pageSize int32) (WorkflowPage, error) {
+	if pageSize < 1 || pageSize > 100 {
+		return WorkflowPage{}, errors.New("workflow page size must be between 1 and 100")
 	}
-	return workflows, nil
+	params := db.ListWorkflowsParams{OwnerID: ownerID, PageSize: pageSize + 1}
+	if cursor != nil {
+		params.BeforeCreatedAt = pgtype.Timestamptz{Time: cursor.CreatedAt.UTC(), Valid: true}
+		params.BeforeID = pgtype.UUID{Bytes: cursor.ID, Valid: true}
+	}
+	workflows, err := s.queries.ListWorkflows(ctx, params)
+	if err != nil {
+		return WorkflowPage{}, fmt.Errorf("list workflows: %w", err)
+	}
+	page := WorkflowPage{Items: workflows}
+	if len(workflows) > int(pageSize) {
+		page.Items = workflows[:pageSize]
+		last := page.Items[len(page.Items)-1]
+		page.NextCursor = &PageCursor{CreatedAt: last.CreatedAt.Time.UTC(), ID: last.ID}
+	}
+	return page, nil
 }
 
 func marshalDefinition(definition domain.WorkflowDefinition) ([]byte, string, error) {
