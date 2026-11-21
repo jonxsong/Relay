@@ -22,7 +22,7 @@ COPY --from=web-dependencies /web/node_modules ./node_modules
 COPY web/ ./
 RUN pnpm build
 
-FROM nats:2.11-alpine AS nats
+FROM nats:2.15-alpine AS nats
 
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production \
