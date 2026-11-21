@@ -190,8 +190,8 @@ github.com/ncruces/go-strftime v1.1.0 h1:vtPmPWMkb539RGV9WpWT9EwJGvrOCKvMNI4obWL
 github.com/ncruces/go-strftime v1.1.0/go.mod h1:yVaq7iwCN09vHRrKBrrflXT0M9tTMG2KmZ9Fj7xeG/g=
 github.com/ncruces/julianday v1.0.0 h1:fH0OKwa7NWvniGQtxdJRxAgkBMolni2BjDHaWTxqt7M=
 github.com/ncruces/julianday v1.0.0/go.mod h1:Dusn2KvZrrovOMJuOt0TNXL6tB7U2E8kvza5fFc9G7g=
-github.com/openai/openai-go/v3 v3.99.0 h1:Pc2z4NLWJ1dtwk7Trx4LlWNBMwcT5z99Q7cT0H6xcWM=
-github.com/openai/openai-go/v3 v3.99.0/go.mod h1:rpJT0W8BAp3rmc3a4HpqeuwpBF6tB6OdUPTXB0rFLGE=
+github.com/openai/openai-go/v3 v3.102.0 h1:1W4k1e6JguC/evhpL8gCR0g+GGIxcNpDUOhjQwjxrWs=
+github.com/openai/openai-go/v3 v3.102.0/go.mod h1:rpJT0W8BAp3rmc3a4HpqeuwpBF6tB6OdUPTXB0rFLGE=
 github.com/paulmach/orb v0.14.0 h1:GE96348pAD+JkRTp8z5YMiPd1lqUEcFIFGi20C2n5uM=
 github.com/paulmach/orb v0.14.0/go.mod h1:6scRWINywA2Jf05dcjOfLfxrUIMECvTSG2MVbRLxu/k=
 github.com/pganalyze/pg_query_go/v6 v6.2.2 h1:O0L6zMC226R82RF3X5n0Ki6HjytDsoAzuzp4ATVAHNo=
